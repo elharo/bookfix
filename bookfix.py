@@ -43,12 +43,15 @@ def read_author(reader: PdfReader) -> str:
     return "Not Implemented"
 
 
-def main() -> None:
+def main(args: Optional[list[str]] = None) -> None:
     parser = argparse.ArgumentParser(description="Print the title and author(s) of a PDF file.")
     parser.add_argument("filename", help="Path to the PDF file")
-    args = parser.parse_args()
+    parser.add_argument("--dryrun", action="store_true", help="Show what would be changed without modifying the file")
+    parsed = parser.parse_args(args)
 
-    metadata = get_pdf_metadata(args.filename)
+    metadata = get_pdf_metadata(parsed.filename)
+    if parsed.dryrun:
+        print("Dry run: no changes will be written")
     print(get_title(metadata))
     print(get_authors(metadata))
 

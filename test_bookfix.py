@@ -6,7 +6,7 @@ from pypdf import PdfWriter, PdfReader
 from pypdf import DocumentInformation
 from pypdf.generic import NameObject, DictionaryObject, NumberObject, DecodedStreamObject
 
-from bookfix import get_pdf_metadata, get_title, get_authors, has_cover, read_title, read_author
+from bookfix import get_pdf_metadata, get_title, get_authors, has_cover, read_title, read_author, main
 
 
 def make_pdf(title: str | None = None, author: str | None = None) -> io.BytesIO:
@@ -124,3 +124,30 @@ def test_read_author_returns_not_implemented() -> None:
     from pypdf import PdfReader
     reader = PdfReader(make_pdf(author="Jane Doe"))
     assert read_author(reader) == "Not Implemented"
+
+
+# --- main --dryrun flag ---
+
+def test_main_dryrun_prints_dryrun_message(tmp_path, capsys) -> None:
+    pdf_path = tmp_path / "test.pdf"
+    pdf_path.write_bytes(make_pdf(title="My Book", author="Jane Doe").read())
+    main(["--dryrun", str(pdf_path)])
+    captured = capsys.readouterr()
+    assert "dry run" in captured.out.lower()
+
+
+def test_main_dryrun_does_not_modify_file(tmp_path) -> None:
+    pdf_bytes = make_pdf(title="My Book", author="Jane Doe").read()
+    pdf_path = tmp_path / "test.pdf"
+    pdf_path.write_bytes(pdf_bytes)
+    main(["--dryrun", str(pdf_path)])
+    assert pdf_path.read_bytes() == pdf_bytes
+
+
+def test_main_without_dryrun_runs_normally(tmp_path, capsys) -> None:
+    pdf_path = tmp_path / "test.pdf"
+    pdf_path.write_bytes(make_pdf(title="My Book", author="Jane Doe").read())
+    main([str(pdf_path)])
+    captured = capsys.readouterr()
+    assert "My Book" in captured.out
+    assert "Jane Doe" in captured.out
