@@ -2,10 +2,11 @@
 
 import io
 import pytest
-from pypdf import PdfWriter
+from pypdf import PdfWriter, PdfReader
 from pypdf import DocumentInformation
+from pypdf.generic import NameObject, DictionaryObject, NumberObject, DecodedStreamObject
 
-from bookfix import get_pdf_metadata, get_title, get_authors
+from bookfix import get_pdf_metadata, get_title, get_authors, has_cover
 
 
 def make_pdf(title: str | None = None, author: str | None = None) -> io.BytesIO:
@@ -67,3 +68,53 @@ def test_get_pdf_metadata_returns_document_information() -> None:
 def test_get_pdf_metadata_returns_none_for_empty_pdf() -> None:
     metadata = get_pdf_metadata(make_pdf())
     assert metadata is None or isinstance(metadata, DocumentInformation)
+
+
+def make_pdf_with_image() -> PdfReader:
+    """Return a PdfReader whose first page contains an image (simulates a cover)."""
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=612, height=792)
+
+    img_stream = DecodedStreamObject()
+    img_stream.set_data(b"\xff\xff\xff")
+    img_stream.update({
+        NameObject("/Type"): NameObject("/XObject"),
+        NameObject("/Subtype"): NameObject("/Image"),
+        NameObject("/Width"): NumberObject(1),
+        NameObject("/Height"): NumberObject(1),
+        NameObject("/ColorSpace"): NameObject("/DeviceRGB"),
+        NameObject("/BitsPerComponent"): NumberObject(8),
+    })
+
+    if "/Resources" not in page:
+        page[NameObject("/Resources")] = DictionaryObject()
+    resources = page["/Resources"]
+    if "/XObject" not in resources:
+        resources[NameObject("/XObject")] = DictionaryObject()
+    resources["/XObject"][NameObject("/Im0")] = img_stream
+
+    buf = io.BytesIO()
+    writer.write(buf)
+    buf.seek(0)
+    return PdfReader(buf)
+
+
+# --- has_cover ---
+
+def test_has_cover_returns_true_when_first_page_has_image() -> None:
+    reader = make_pdf_with_image()
+    assert has_cover(reader) is True
+
+
+def test_has_cover_returns_false_when_first_page_has_no_image() -> None:
+    reader = PdfReader(make_pdf())
+    assert has_cover(reader) is False
+
+
+def test_has_cover_returns_false_for_empty_pdf() -> None:
+    writer = PdfWriter()
+    buf = io.BytesIO()
+    writer.write(buf)
+    buf.seek(0)
+    reader = PdfReader(buf)
+    assert has_cover(reader) is False
