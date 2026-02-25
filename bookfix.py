@@ -27,6 +27,12 @@ def get_authors(metadata: Optional[DocumentInformation]) -> str:
     return "Unknown Author"
 
 
+def has_cover(reader: PdfReader) -> bool:
+    """Return True if the first page of the PDF appears to be a cover page."""
+    if not reader.pages:
+        return False
+    return len(reader.pages[0].images) > 0
+
 def read_title(reader: PdfReader) -> str:
     """Read the title from the PDF document. Not yet implemented."""
     return "Not Implemented"
