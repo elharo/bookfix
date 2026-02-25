@@ -120,7 +120,28 @@ def test_read_title_returns_not_implemented() -> None:
     assert read_title(reader) == "Not Implemented"
 
 
-def test_read_author_returns_not_implemented() -> None:
-    from pypdf import PdfReader
-    reader = PdfReader(make_pdf(author="Jane Doe"))
-    assert read_author(reader) == "Not Implemented"
+def make_pdf_with_text_content(text: str) -> PdfReader:
+    """Return a PdfReader whose first page contains the given text."""
+    from pypdf.generic import DecodedStreamObject
+
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=612, height=792)
+
+    content = DecodedStreamObject()
+    content.set_data(f"BT ({text}) Tj ET".encode())
+    page[NameObject("/Contents")] = writer._add_object(content)
+
+    buf = io.BytesIO()
+    writer.write(buf)
+    buf.seek(0)
+    return PdfReader(buf)
+
+
+def test_read_author_returns_author_from_content() -> None:
+    reader = make_pdf_with_text_content("by Jane Doe")
+    assert read_author(reader) == "Jane Doe"
+
+
+def test_read_author_returns_unknown_when_no_author_found() -> None:
+    reader = PdfReader(make_pdf())
+    assert read_author(reader) == "Unknown Author"
