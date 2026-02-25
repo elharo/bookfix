@@ -6,7 +6,7 @@ from pypdf import PdfWriter, PdfReader
 from pypdf import DocumentInformation
 from pypdf.generic import NameObject, DictionaryObject, NumberObject, DecodedStreamObject
 
-from bookfix import get_pdf_metadata, get_title, get_authors, read_title, read_author
+from bookfix import get_pdf_metadata, get_title, get_authors, has_cover, read_title, read_author
 
 
 def make_pdf(title: str | None = None, author: str | None = None) -> io.BytesIO:
