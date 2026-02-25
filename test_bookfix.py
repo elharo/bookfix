@@ -5,7 +5,7 @@ import pytest
 from pypdf import PdfWriter
 from pypdf import DocumentInformation
 
-from bookfix import get_pdf_metadata, get_title, get_authors
+from bookfix import get_pdf_metadata, get_title, get_authors, read_title, read_author
 
 
 def make_pdf(title: str | None = None, author: str | None = None) -> io.BytesIO:
@@ -67,3 +67,19 @@ def test_get_pdf_metadata_returns_document_information() -> None:
 def test_get_pdf_metadata_returns_none_for_empty_pdf() -> None:
     metadata = get_pdf_metadata(make_pdf())
     assert metadata is None or isinstance(metadata, DocumentInformation)
+
+
+# --- read_title ---
+
+def test_read_title_returns_not_implemented() -> None:
+    from pypdf import PdfReader
+    reader = PdfReader(make_pdf(title="My Book"))
+    assert read_title(reader) == "Not Implemented"
+
+
+# --- read_author ---
+
+def test_read_author_returns_not_implemented() -> None:
+    from pypdf import PdfReader
+    reader = PdfReader(make_pdf(author="Jane Doe"))
+    assert read_author(reader) == "Not Implemented"
