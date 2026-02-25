@@ -103,12 +103,12 @@ def make_pdf_with_image() -> PdfReader:
 
 def test_has_cover_returns_true_when_first_page_has_image() -> None:
     reader = make_pdf_with_image()
-    assert has_cover(reader) is True
+    assert has_cover(reader)
 
 
 def test_has_cover_returns_false_when_first_page_has_no_image() -> None:
     reader = PdfReader(make_pdf())
-    assert has_cover(reader) is False
+    assert not has_cover(reader)
 
 
 def test_has_cover_returns_false_for_empty_pdf() -> None:
@@ -117,4 +117,4 @@ def test_has_cover_returns_false_for_empty_pdf() -> None:
     writer.write(buf)
     buf.seek(0)
     reader = PdfReader(buf)
-    assert has_cover(reader) is False
+    assert not has_cover(reader)
