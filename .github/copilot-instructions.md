@@ -1,6 +1,6 @@
 # Copilot Instructions
 
-This repository contains **bookfix**, a Python command-line tool that reads PDF metadata and prints the title and author(s) of a PDF file.
+This repository contains **bookfix**, a Python command-line tool that reads PDF files and fills in missing details (author, title, and cover).
 
 ## Project Overview
 
@@ -20,6 +20,7 @@ This repository contains **bookfix**, a Python command-line tool that reads PDF 
 - Tests use `pytest` and are located in `test_bookfix.py`.
 - Use `pypdf.PdfWriter` to create in-memory PDF fixtures for tests rather than relying on files on disk.
 - Run tests with: `pytest`
+- Use test first programming. Make sure you have a failing test before fixing a bug or implementing a new feature.
 
 ## Key Patterns
 
