@@ -6,7 +6,7 @@ from pypdf import PdfWriter, PdfReader
 from pypdf import DocumentInformation
 from pypdf.generic import NameObject, DictionaryObject, NumberObject, DecodedStreamObject
 
-from bookfix import get_pdf_metadata, get_title, get_authors, has_cover
+from bookfix import get_pdf_metadata, get_title, get_authors, read_title, read_author
 
 
 def make_pdf(title: str | None = None, author: str | None = None) -> io.BytesIO:
@@ -25,8 +25,6 @@ def make_pdf(title: str | None = None, author: str | None = None) -> io.BytesIO:
     buf.seek(0)
     return buf
 
-
-# --- get_title ---
 
 def test_get_title_returns_title_from_metadata() -> None:
     metadata = get_pdf_metadata(make_pdf(title="My Book"))
@@ -57,8 +55,6 @@ def test_get_authors_returns_unknown_when_no_author() -> None:
 def test_get_authors_returns_unknown_when_metadata_is_none() -> None:
     assert get_authors(None) == "Unknown Author"
 
-
-# --- get_pdf_metadata ---
 
 def test_get_pdf_metadata_returns_document_information() -> None:
     metadata = get_pdf_metadata(make_pdf(title="T", author="A"))
@@ -99,8 +95,6 @@ def make_pdf_with_image() -> PdfReader:
     return PdfReader(buf)
 
 
-# --- has_cover ---
-
 def test_has_cover_returns_true_when_first_page_has_image() -> None:
     reader = make_pdf_with_image()
     assert has_cover(reader)
@@ -118,3 +112,15 @@ def test_has_cover_returns_false_for_empty_pdf() -> None:
     buf.seek(0)
     reader = PdfReader(buf)
     assert not has_cover(reader)
+
+
+def test_read_title_returns_not_implemented() -> None:
+    from pypdf import PdfReader
+    reader = PdfReader(make_pdf(title="My Book"))
+    assert read_title(reader) == "Not Implemented"
+
+
+def test_read_author_returns_not_implemented() -> None:
+    from pypdf import PdfReader
+    reader = PdfReader(make_pdf(author="Jane Doe"))
+    assert read_author(reader) == "Not Implemented"
