@@ -1,4 +1,4 @@
-"""pytest unit tests for bookfix.py"""
+"""pytest unit tests for bookfix"""
 
 import io
 import pytest
