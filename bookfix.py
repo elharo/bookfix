@@ -27,6 +27,16 @@ def get_authors(metadata: Optional[DocumentInformation]) -> str:
     return "Unknown Author"
 
 
+def read_title(reader: PdfReader) -> str:
+    """Read the title from the PDF document. Not yet implemented."""
+    return "Not Implemented"
+
+
+def read_author(reader: PdfReader) -> str:
+    """Read the author from the PDF document. Not yet implemented."""
+    return "Not Implemented"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Print the title and author(s) of a PDF file.")
     parser.add_argument("filename", help="Path to the PDF file")
