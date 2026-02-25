@@ -114,10 +114,51 @@ def test_has_cover_returns_false_for_empty_pdf() -> None:
     assert not has_cover(reader)
 
 
-def test_read_title_returns_not_implemented() -> None:
-    from pypdf import PdfReader
-    reader = PdfReader(make_pdf(title="My Book"))
-    assert read_title(reader) == "Not Implemented"
+def make_pdf_with_text(text: str) -> PdfReader:
+    """Return a PdfReader whose first page contains the given plain text."""
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=612, height=792)
+
+    content = f"BT /F1 12 Tf 100 700 Td ({text}) Tj ET".encode()
+    content_stream = DecodedStreamObject()
+    content_stream.set_data(content)
+
+    font_dict = DictionaryObject({
+        NameObject("/Type"): NameObject("/Font"),
+        NameObject("/Subtype"): NameObject("/Type1"),
+        NameObject("/BaseFont"): NameObject("/Helvetica"),
+    })
+
+    if NameObject("/Resources") not in page:
+        page[NameObject("/Resources")] = DictionaryObject()
+    page["/Resources"][NameObject("/Font")] = DictionaryObject({
+        NameObject("/F1"): font_dict
+    })
+    page[NameObject("/Contents")] = content_stream
+
+    buf = io.BytesIO()
+    writer.write(buf)
+    buf.seek(0)
+    return PdfReader(buf)
+
+
+def test_read_title_returns_first_line_of_page_text() -> None:
+    reader = make_pdf_with_text("My Book Title")
+    assert read_title(reader) == "My Book Title"
+
+
+def test_read_title_returns_unknown_when_no_text() -> None:
+    reader = PdfReader(make_pdf())
+    assert read_title(reader) == "Unknown Title"
+
+
+def test_read_title_returns_unknown_for_empty_pdf() -> None:
+    writer = PdfWriter()
+    buf = io.BytesIO()
+    writer.write(buf)
+    buf.seek(0)
+    reader = PdfReader(buf)
+    assert read_title(reader) == "Unknown Title"
 
 
 def test_read_author_returns_not_implemented() -> None:

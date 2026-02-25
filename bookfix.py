@@ -34,8 +34,20 @@ def has_cover(reader: PdfReader) -> bool:
     return len(reader.pages[0].images) > 0
 
 def read_title(reader: PdfReader) -> str:
-    """Read the title from the PDF document. Not yet implemented."""
-    return "Not Implemented"
+    """Read the title from the first page of the PDF document.
+
+    Extracts the text from the first page and returns the first non-empty line.
+    Returns 'Unknown Title' if the page has no extractable text.
+    """
+    if not reader.pages:
+        return "Unknown Title"
+    text = reader.pages[0].extract_text()
+    if text:
+        for line in text.splitlines():
+            line = line.strip()
+            if line:
+                return line
+    return "Unknown Title"
 
 
 def read_author(reader: PdfReader) -> str:
