@@ -1,2 +1,4 @@
 pypdf
 pytest
+requests
+Pillow

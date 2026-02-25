@@ -6,7 +6,7 @@ from pypdf import PdfWriter, PdfReader
 from pypdf import DocumentInformation
 from pypdf.generic import NameObject, DictionaryObject, NumberObject, DecodedStreamObject
 
-from bookfix import get_pdf_metadata, get_title, get_authors, has_cover, read_title, read_author
+from bookfix import get_pdf_metadata, get_title, get_authors, has_cover, read_title, read_author, fetch_cover_image, add_cover
 
 
 def make_pdf(title: str | None = None, author: str | None = None) -> io.BytesIO:
@@ -124,3 +124,77 @@ def test_read_author_returns_not_implemented() -> None:
     from pypdf import PdfReader
     reader = PdfReader(make_pdf(author="Jane Doe"))
     assert read_author(reader) == "Not Implemented"
+
+
+# --- fetch_cover_image ---
+
+def make_jpeg_bytes() -> bytes:
+    """Return minimal JPEG image bytes."""
+    from PIL import Image
+    img = Image.new("RGB", (10, 15), color=(255, 0, 0))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def test_fetch_cover_image_returns_bytes_when_cover_found() -> None:
+    from unittest.mock import patch, MagicMock
+    search_mock = MagicMock()
+    search_mock.json.return_value = {"docs": [{"cover_i": 12345}]}
+    image_mock = MagicMock()
+    image_mock.content = make_jpeg_bytes()
+
+    with patch("bookfix.requests.get", side_effect=[search_mock, image_mock]):
+        result = fetch_cover_image("Test Book", "Test Author")
+
+    assert result == image_mock.content
+
+
+def test_fetch_cover_image_returns_none_when_no_docs() -> None:
+    from unittest.mock import patch, MagicMock
+    search_mock = MagicMock()
+    search_mock.json.return_value = {"docs": []}
+
+    with patch("bookfix.requests.get", return_value=search_mock):
+        result = fetch_cover_image("Unknown Book", "Nobody")
+
+    assert result is None
+
+
+def test_fetch_cover_image_returns_none_when_no_cover_id() -> None:
+    from unittest.mock import patch, MagicMock
+    search_mock = MagicMock()
+    search_mock.json.return_value = {"docs": [{"title": "Test Book"}]}
+
+    with patch("bookfix.requests.get", return_value=search_mock):
+        result = fetch_cover_image("Test Book", "Test Author")
+
+    assert result is None
+
+
+# --- add_cover ---
+
+def test_add_cover_inserts_image_page_at_front() -> None:
+    from unittest.mock import patch, MagicMock
+    search_mock = MagicMock()
+    search_mock.json.return_value = {"docs": [{"cover_i": 99}]}
+    image_mock = MagicMock()
+    image_mock.content = make_jpeg_bytes()
+
+    reader = PdfReader(make_pdf(title="Test Book", author="Test Author"))
+    with patch("bookfix.requests.get", side_effect=[search_mock, image_mock]):
+        writer = add_cover(reader)
+
+    assert len(writer.pages) == 2
+
+
+def test_add_cover_returns_original_pages_when_no_cover_found() -> None:
+    from unittest.mock import patch, MagicMock
+    search_mock = MagicMock()
+    search_mock.json.return_value = {"docs": []}
+
+    reader = PdfReader(make_pdf(title="Test Book", author="Test Author"))
+    with patch("bookfix.requests.get", return_value=search_mock):
+        writer = add_cover(reader)
+
+    assert len(writer.pages) == 1
