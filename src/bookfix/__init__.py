@@ -96,17 +96,12 @@ def read_author(reader: PdfReader) -> str:
     return "Unknown Author"
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Print the title and author(s) of a PDF file.")
-    parser.add_argument("filename", help="Path to the PDF file")
-    parser.add_argument(
-        "--dryrun",
-        action="store_true",
-        help="Print what would be changed without modifying the file.",
-    )
-    args = parser.parse_args()
+def fix_pdf(filename: str, dryrun: bool) -> None:
+    """Fix missing title, author, and cover in a PDF file.
 
-    reader = PdfReader(args.filename)
+    If dryrun is True, print what would be changed without modifying the file.
+    """
+    reader = PdfReader(filename)
     metadata = reader.metadata
     title = get_title(metadata)
     authors = get_authors(metadata)
@@ -125,18 +120,18 @@ def main() -> None:
     if cover_missing:
         cover_image_bytes = fetch_cover_image(title, authors)
 
-    if not args.dryrun and (updates or cover_image_bytes):
+    if not dryrun and (updates or cover_image_bytes):
         if cover_image_bytes:
             writer = add_cover(reader, cover_image_bytes)
         else:
             writer = PdfWriter()
-            writer.append(args.filename)
+            writer.append(filename)
         if updates:
             writer.add_metadata(updates)
-        with open(args.filename, "wb") as f:
+        with open(filename, "wb") as f:
             writer.write(f)
 
-    if args.dryrun:
+    if dryrun:
         print(title)
         print(authors)
         if cover_missing:
@@ -144,6 +139,18 @@ def main() -> None:
                 print("Cover found")
             else:
                 print("Cover not found")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Print the title and author(s) of a PDF file.")
+    parser.add_argument("filename", help="Path to the PDF file")
+    parser.add_argument(
+        "--dryrun",
+        action="store_true",
+        help="Print what would be changed without modifying the file.",
+    )
+    args = parser.parse_args()
+    fix_pdf(args.filename, args.dryrun)
 
 
 if __name__ == "__main__":

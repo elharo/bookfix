@@ -12,7 +12,7 @@ from pypdf.generic import NameObject, DictionaryObject, NumberObject, DecodedStr
 from PIL import Image
 from unittest.mock import patch
 
-from bookfix import get_pdf_metadata, get_title, get_authors, has_cover, read_title, read_author, fetch_cover_image, add_cover, main
+from bookfix import get_pdf_metadata, get_title, get_authors, has_cover, read_title, read_author, fetch_cover_image, add_cover, fix_pdf, main
 
 
 def make_pdf(title: str | None = None, author: str | None = None) -> io.BytesIO:
@@ -371,6 +371,56 @@ def test_main_without_dryrun_writes_missing_author_to_file() -> None:
         metadata = reader.metadata
         assert metadata is not None
         assert metadata.author == "Jane Doe"
+    finally:
+        os.unlink(path)
+
+
+def test_fix_pdf_writes_missing_author_to_file() -> None:
+    """Test that fix_pdf writes a missing author extracted from content to the file."""
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=612, height=792)
+    font_dict = DictionaryObject({
+        NameObject("/Type"): NameObject("/Font"),
+        NameObject("/Subtype"): NameObject("/Type1"),
+        NameObject("/BaseFont"): NameObject("/Helvetica"),
+        NameObject("/Encoding"): NameObject("/WinAnsiEncoding"),
+    })
+    if "/Resources" not in page:
+        page[NameObject("/Resources")] = DictionaryObject()
+    resources = page["/Resources"]
+    if "/Font" not in resources:
+        resources[NameObject("/Font")] = DictionaryObject()
+    resources["/Font"][NameObject("/F1")] = font_dict
+    content = b"BT /F1 12 Tf 100 700 Td (by Alice Smith) Tj ET"
+    stream = DecodedStreamObject()
+    stream.set_data(content)
+    page[NameObject("/Contents")] = stream
+    writer.add_metadata({"/Title": "Test Book"})
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as file:
+        writer.write(file)
+        path = file.name
+    try:
+        with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
+            fix_pdf(path, dryrun=False)
+        reader = PdfReader(path)
+        assert reader.metadata is not None
+        assert reader.metadata.author == "Alice Smith"
+    finally:
+        os.unlink(path)
+
+
+def test_fix_pdf_dryrun_does_not_modify_file() -> None:
+    """Test that fix_pdf with dryrun=True does not modify the PDF file on disk."""
+    path = make_pdf_file(title="My Book", author="Jane Doe")
+    try:
+        with open(path, "rb") as file:
+            content_before = file.read()
+        with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
+            fix_pdf(path, dryrun=True)
+        with open(path, "rb") as file:
+            content_after = file.read()
+        assert content_before == content_after
     finally:
         os.unlink(path)
 
