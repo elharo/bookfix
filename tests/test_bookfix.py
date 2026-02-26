@@ -1,12 +1,15 @@
 """pytest unit tests for bookfix.py"""
 
 import io
+import json
+import unittest.mock
 import pytest
 from pypdf import PdfWriter, PdfReader
 from pypdf import DocumentInformation
 from pypdf.generic import NameObject, DictionaryObject, NumberObject, DecodedStreamObject
+from PIL import Image
 
-from bookfix import get_pdf_metadata, get_title, get_authors, has_cover, read_title, read_author
+from bookfix import get_pdf_metadata, get_title, get_authors, has_cover, read_title, read_author, fetch_cover_image, add_cover
 
 
 def make_pdf(title: str | None = None, author: str | None = None) -> io.BytesIO:
@@ -124,3 +127,85 @@ def test_read_author_returns_not_implemented() -> None:
     from pypdf import PdfReader
     reader = PdfReader(make_pdf(author="Jane Doe"))
     assert read_author(reader) == "Not Implemented"
+
+
+def make_jpeg_bytes() -> bytes:
+    """Return minimal valid JPEG image bytes (1x1 white pixel)."""
+    img = Image.new("RGB", (1, 1), color=(255, 255, 255))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def test_fetch_cover_image_returns_bytes_when_cover_found() -> None:
+    search_response = json.dumps({
+        "docs": [{"cover_i": 12345}]
+    }).encode()
+    cover_bytes = make_jpeg_bytes()
+
+    def fake_urlopen(url):
+        mock_resp = unittest.mock.MagicMock()
+        if "search.json" in url:
+            mock_resp.read.return_value = search_response
+        else:
+            mock_resp.read.return_value = cover_bytes
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = unittest.mock.MagicMock(return_value=False)
+        return mock_resp
+
+    with unittest.mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        result = fetch_cover_image("Some Book", "Some Author")
+
+    assert result == cover_bytes
+
+
+def test_fetch_cover_image_returns_none_when_no_docs() -> None:
+    search_response = json.dumps({"docs": []}).encode()
+
+    mock_resp = unittest.mock.MagicMock()
+    mock_resp.read.return_value = search_response
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = unittest.mock.MagicMock(return_value=False)
+
+    with unittest.mock.patch("urllib.request.urlopen", return_value=mock_resp):
+        result = fetch_cover_image("Unknown Book", "Unknown Author")
+
+    assert result is None
+
+
+def test_fetch_cover_image_returns_none_when_no_cover_id() -> None:
+    search_response = json.dumps({"docs": [{"title": "Some Book"}]}).encode()
+
+    mock_resp = unittest.mock.MagicMock()
+    mock_resp.read.return_value = search_response
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = unittest.mock.MagicMock(return_value=False)
+
+    with unittest.mock.patch("urllib.request.urlopen", return_value=mock_resp):
+        result = fetch_cover_image("Some Book", "Some Author")
+
+    assert result is None
+
+
+def test_add_cover_prepends_cover_as_first_page() -> None:
+    reader = PdfReader(make_pdf(title="My Book", author="Author"))
+    original_page_count = len(reader.pages)
+    cover_bytes = make_jpeg_bytes()
+
+    writer = add_cover(reader, cover_bytes)
+
+    assert len(writer.pages) == original_page_count + 1
+
+
+def test_add_cover_first_page_has_image() -> None:
+    reader = PdfReader(make_pdf())
+    cover_bytes = make_jpeg_bytes()
+
+    writer = add_cover(reader, cover_bytes)
+
+    # Write and re-read to verify the cover page has an image
+    buf = io.BytesIO()
+    writer.write(buf)
+    buf.seek(0)
+    result_reader = PdfReader(buf)
+    assert has_cover(result_reader)
