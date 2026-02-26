@@ -199,7 +199,11 @@ def ask_llm_for_metadata(
         result = json.loads(response.choices[0].message.content)
         # Use `or None` to convert empty-string results to None as well as missing keys.
         title = result.get("title") or None
-        author = result.get("author") or None
+        raw_author = result.get("author")
+        if isinstance(raw_author, list):
+            author = ", ".join(str(name) for name in raw_author) if raw_author else None
+        else:
+            author = raw_author or None
         return title, author
     except Exception:  # noqa: BLE001 – treat all LLM errors as unavailable
         return None, None
