@@ -1,6 +1,7 @@
 """bookfix: reads PDF metadata and prints the title and author(s)."""
 
 import argparse
+import re
 from typing import Optional
 
 from pypdf import PdfReader
@@ -33,14 +34,23 @@ def has_cover(reader: PdfReader) -> bool:
         return False
     return len(reader.pages[0].images) > 0
 
+# Matches 'by <Name>' where each name component starts with a capital letter.
+_AUTHOR_PATTERN = re.compile(r'\bby\s+([A-Z][a-zA-Z\-]+(?:\s+[A-Z][a-zA-Z\-]+)*)')
+
 def read_title(reader: PdfReader) -> str:
     """Read the title from the PDF document. Not yet implemented."""
     return "Not Implemented"
 
 
 def read_author(reader: PdfReader) -> str:
-    """Read the author from the PDF document. Not yet implemented."""
-    return "Not Implemented"
+    """Read the author from the PDF document content by scanning for 'by <Name>' patterns."""
+    max_pages = min(len(reader.pages), 5)
+    for i in range(max_pages):
+        text = reader.pages[i].extract_text() or ""
+        match = _AUTHOR_PATTERN.search(text)
+        if match:
+            return match.group(1)
+    return "Unknown Author"
 
 
 def main() -> None:
