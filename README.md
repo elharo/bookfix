@@ -30,8 +30,6 @@ For example:
 python bookfix.py mybook.pdf
 ```
 
-This prints the title and author(s) of the PDF to standard output.
-
 ## Running the Tests
 
 ```
