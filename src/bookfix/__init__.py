@@ -286,7 +286,7 @@ def fix_pdf(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Update the title, author, and cover of a PDF file.")
+    parser = argparse.ArgumentParser(description="Update the title, authors, and cover of a PDF file.")
     parser.add_argument("filename", help="Path to the PDF file")
     parser.add_argument(
         "--dryrun",
