@@ -39,7 +39,6 @@ def has_cover(reader: PdfReader) -> bool:
         return False
     return len(reader.pages[0].images) > 0
 
-<<<<<<< HEAD
 
 def fetch_cover_image(title: str, author: str) -> Optional[bytes]:
     """Search Open Library for a book cover and return the image bytes, or None if not found."""
