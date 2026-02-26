@@ -39,8 +39,8 @@ def read_title(reader: PdfReader) -> str:
 
 
 def read_author(reader: PdfReader) -> str:
-    """Read the author from the PDF document. Not yet implemented."""
-    return "Not Implemented"
+    """Read the author from the PDF document metadata."""
+    return get_authors(reader.metadata)
 
 
 def main() -> None:

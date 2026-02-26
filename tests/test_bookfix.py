@@ -120,7 +120,11 @@ def test_read_title_returns_not_implemented() -> None:
     assert read_title(reader) == "Not Implemented"
 
 
-def test_read_author_returns_not_implemented() -> None:
-    from pypdf import PdfReader
+def test_read_author_returns_author_from_pdf() -> None:
     reader = PdfReader(make_pdf(author="Jane Doe"))
-    assert read_author(reader) == "Not Implemented"
+    assert read_author(reader) == "Jane Doe"
+
+
+def test_read_author_returns_unknown_when_no_author() -> None:
+    reader = PdfReader(make_pdf())
+    assert read_author(reader) == "Unknown Author"
