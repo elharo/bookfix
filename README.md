@@ -4,12 +4,12 @@ bookfix is a command-line tool that reads PDF files and prints their title and a
 
 ## Installation
 
-Create and activate a virtual environment, then install the required dependencies:
+Create and activate a virtual environment, then install the package:
 
 ```
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
 ```
 
 On Windows, activate the virtual environment with:
@@ -21,13 +21,13 @@ On Windows, activate the virtual environment with:
 ## Usage
 
 ```
-python bookfix.py <path-to-pdf>
+bookfix <path-to-pdf>
 ```
 
 For example:
 
 ```
-python bookfix.py mybook.pdf
+bookfix mybook.pdf
 ```
 
 ## Contributing
