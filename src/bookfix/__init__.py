@@ -69,30 +69,63 @@ def add_cover(reader: PdfReader, cover_image_bytes: bytes) -> PdfWriter:
     return writer
 
 
+# Matches 'by <Name>' where each name component starts with a capital letter.
+_AUTHOR_PATTERN = re.compile(r'\bby\s+([A-Z][a-zA-Z\-]+(?:\s+[A-Z][a-zA-Z\-]+)*)')
+
+# Matches publisher-like words that indicate a line is a publisher name, not an author.
+_PUBLISHER_KEYWORDS = re.compile(
+    r'\b(publishers?|publishing|press|corporation|corp\.?|inc\.?|ltd\.?)\b',
+    re.IGNORECASE,
+)
+
+# Matches institutional affiliation lines like "Department of Mathematics, Harvard University"
+# or lines starting with "Department of".
+_AFFILIATION_PATTERN = re.compile(
+    r'(?:,\s*\w[\w\s]*(university|college|institute|department)'
+    r'|\bDepartment\s+of\b)',
+    re.IGNORECASE,
+)
+
+
+def _is_spaced_text(line: str) -> bool:
+    """Return True if the line appears to be spaced-out text (e.g., 'L Y N N H.')."""
+    tokens = line.split()
+    if len(tokens) < 4:
+        return False
+    short_tokens = sum(1 for t in tokens if len(t) <= 2)
+    return short_tokens / len(tokens) > 0.5
+
+
 def read_title(reader: PdfReader) -> str:
-    """Read the title from the PDF document content by returning the first non-empty line."""
+    """Read the title from the PDF document content by returning the first non-empty line
+    that does not appear to be a spaced-out author byline, affiliation, or publisher name."""
     max_pages = min(len(reader.pages), 5)
     for i in range(max_pages):
         text = reader.pages[i].extract_text() or ""
         for line in text.splitlines():
             line = line.strip()
-            if line:
-                return line
+            if not line:
+                continue
+            if _is_spaced_text(line):
+                continue
+            if _PUBLISHER_KEYWORDS.search(line):
+                continue
+            if _AFFILIATION_PATTERN.search(line):
+                continue
+            return line
     return "Unknown Title"
 
 
-# Matches 'by <Name>' where each name component starts with a capital letter.
-_AUTHOR_PATTERN = re.compile(r'\bby\s+([A-Z][a-zA-Z\-]+(?:\s+[A-Z][a-zA-Z\-]+)*)')
-
-
 def read_author(reader: PdfReader) -> str:
-    """Read the author from the PDF document content by scanning for 'by <Name>' patterns."""
+    """Read the author from the PDF document content by scanning for 'by <Name>' patterns,
+    excluding publisher names."""
     max_pages = min(len(reader.pages), 5)
     for i in range(max_pages):
         text = reader.pages[i].extract_text() or ""
-        match = _AUTHOR_PATTERN.search(text)
-        if match:
-            return match.group(1)
+        for match in _AUTHOR_PATTERN.finditer(text):
+            author = match.group(1)
+            if not _PUBLISHER_KEYWORDS.search(author):
+                return author
     return "Unknown Author"
 
 

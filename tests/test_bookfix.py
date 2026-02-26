@@ -243,6 +243,44 @@ def make_pdf_with_text(text: str) -> PdfReader:
     return PdfReader(buf)
 
 
+def make_pdf_with_lines(lines: list[str]) -> PdfReader:
+    """Return a PdfReader whose first page contains multiple lines of text."""
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=612, height=792)
+
+    font_dict = DictionaryObject({
+        NameObject("/Type"): NameObject("/Font"),
+        NameObject("/Subtype"): NameObject("/Type1"),
+        NameObject("/BaseFont"): NameObject("/Helvetica"),
+        NameObject("/Encoding"): NameObject("/WinAnsiEncoding"),
+    })
+
+    if "/Resources" not in page:
+        page[NameObject("/Resources")] = DictionaryObject()
+    resources = page["/Resources"]
+    if "/Font" not in resources:
+        resources[NameObject("/Font")] = DictionaryObject()
+    resources["/Font"][NameObject("/F1")] = font_dict
+
+    parts = ["BT /F1 12 Tf 100 700 Td"]
+    for i, line in enumerate(lines):
+        if i == 0:
+            parts.append(f"({line}) Tj")
+        else:
+            parts.append(f"0 -14 Td ({line}) Tj")
+    parts.append("ET")
+    content = " ".join(parts).encode()
+
+    stream = DecodedStreamObject()
+    stream.set_data(content)
+    page[NameObject("/Contents")] = stream
+
+    buf = io.BytesIO()
+    writer.write(buf)
+    buf.seek(0)
+    return PdfReader(buf)
+
+
 def test_read_author_returns_author_from_content() -> None:
     reader = make_pdf_with_text("by Jane Doe")
     assert read_author(reader) == "Jane Doe"
@@ -256,6 +294,52 @@ def test_read_author_returns_unknown_when_no_capitalized_name() -> None:
 def test_read_author_returns_unknown_when_no_author() -> None:
     reader = PdfReader(make_pdf())
     assert read_author(reader) == "Unknown Author"
+
+
+def test_read_author_skips_publisher_name() -> None:
+    """Test that read_author does not return a publisher name as an author."""
+    reader = make_pdf_with_lines([
+        "Published by Jones And Bartlett Publishers",
+        "by Jane Doe",
+    ])
+    assert read_author(reader) == "Jane Doe"
+
+
+def test_read_author_returns_unknown_when_only_publisher_present() -> None:
+    """Test that read_author returns Unknown Author when only a publisher 'by' line exists."""
+    reader = make_pdf_with_text("Published by Jones And Bartlett Publishers")
+    assert read_author(reader) == "Unknown Author"
+
+
+def test_read_title_skips_spaced_out_author_name_line() -> None:
+    """Test that read_title skips lines with spaced-out text like 'L Y N N H. L 0 0 MIS'.
+
+    The zeros ('0') are intentional OCR misrecognitions of the letter 'O', as occurs in
+    real scanned PDFs (e.g., 'LOOMIS' is OCR'd as 'L 0 0 MIS').
+    """
+    reader = make_pdf_with_lines([
+        "L Y N N H. L 0 0 MIS and S H L 0 M 0 S T ERN B ERG",
+        "ADVANCED CALCULUS",
+    ])
+    assert read_title(reader) == "ADVANCED CALCULUS"
+
+
+def test_read_title_skips_publisher_name_line() -> None:
+    """Test that read_title skips lines that contain publisher keywords."""
+    reader = make_pdf_with_lines([
+        "JONES AND BARTLETT PUBLISHERS",
+        "Advanced Calculus",
+    ])
+    assert read_title(reader) == "Advanced Calculus"
+
+
+def test_read_title_skips_affiliation_line() -> None:
+    """Test that read_title skips institutional affiliation lines."""
+    reader = make_pdf_with_lines([
+        "Department of Mathematics, Harvard University",
+        "ADVANCED CALCULUS",
+    ])
+    assert read_title(reader) == "ADVANCED CALCULUS"
 
 
 def make_pdf_file(title: str | None = None, author: str | None = None) -> str:
