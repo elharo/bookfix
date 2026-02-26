@@ -62,6 +62,12 @@ def test_get_authors_returns_unknown_when_metadata_is_none() -> None:
     assert get_authors(None) == "Unknown Author"
 
 
+def test_get_authors_converts_list_string_to_comma_separated() -> None:
+    list_author = "['Jerome L. Rosenberg, Ph.D.', 'Lawrence M. Epstein, Ph.D.', 'Peter J. Krieger, Ed.D.']"
+    metadata = get_pdf_metadata(make_pdf(author=list_author))
+    assert get_authors(metadata) == "Jerome L. Rosenberg, Ph.D., Lawrence M. Epstein, Ph.D., Peter J. Krieger, Ed.D."
+
+
 def test_get_pdf_metadata_returns_document_information() -> None:
     metadata = get_pdf_metadata(make_pdf(title="T", author="A"))
     assert isinstance(metadata, DocumentInformation)
