@@ -150,7 +150,10 @@ def main() -> None:
         help="Print what would be changed without modifying the file.",
     )
     args = parser.parse_args()
-    fix_pdf(args.filename, args.dryrun)
+    try:
+        fix_pdf(args.filename, args.dryrun)
+    except FileNotFoundError:
+        parser.error(f"File not found: {args.filename}")
 
 
 if __name__ == "__main__":
