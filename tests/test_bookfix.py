@@ -62,12 +62,6 @@ def test_get_authors_returns_unknown_when_metadata_is_none() -> None:
     assert get_authors(None) == "Unknown Author"
 
 
-def test_get_authors_converts_list_string_to_comma_separated() -> None:
-    list_author = "['Jerome L. Rosenberg, Ph.D.', 'Lawrence M. Epstein, Ph.D.', 'Peter J. Krieger, Ed.D.']"
-    metadata = get_pdf_metadata(make_pdf(author=list_author))
-    assert get_authors(metadata) == "Jerome L. Rosenberg, Ph.D., Lawrence M. Epstein, Ph.D., Peter J. Krieger, Ed.D."
-
-
 def test_get_pdf_metadata_returns_document_information() -> None:
     metadata = get_pdf_metadata(make_pdf(title="T", author="A"))
     assert isinstance(metadata, DocumentInformation)
@@ -694,6 +688,24 @@ def test_ask_llm_for_metadata_returns_none_for_null_values() -> None:
         title, author = ask_llm_for_metadata("some pdf text")
     assert title is None
     assert author is None
+
+
+def test_ask_llm_for_metadata_joins_list_authors_to_comma_separated_string() -> None:
+    """ask_llm_for_metadata converts a JSON list of authors to a comma-separated string."""
+    author_names = ["Jerome L. Rosenberg, Ph.D.", "Lawrence M. Epstein, Ph.D.", "Peter J. Krieger, Ed.D."]
+    content = json.dumps({"title": "Schaum's Outline", "author": author_names})
+    message = unittest.mock.MagicMock()
+    message.content = content
+    choice = unittest.mock.MagicMock()
+    choice.message = message
+    mock_response = unittest.mock.MagicMock()
+    mock_response.choices = [choice]
+    with patch("openai.OpenAI") as mock_openai_class:
+        mock_client = unittest.mock.MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.chat.completions.create.return_value = mock_response
+        title, author = ask_llm_for_metadata("some pdf text")
+    assert author == "Jerome L. Rosenberg, Ph.D., Lawrence M. Epstein, Ph.D., Peter J. Krieger, Ed.D."
 
 
 def test_ask_llm_for_metadata_uses_provided_model_and_url() -> None:

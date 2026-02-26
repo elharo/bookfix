@@ -1,7 +1,6 @@
 """bookfix: fills in missing cover author and title in book PDFs."""
 
 import argparse
-import ast
 import io
 import json
 import os
@@ -35,23 +34,9 @@ def get_title(metadata: Optional[DocumentInformation]) -> str:
 
 
 def get_authors(metadata: Optional[DocumentInformation]) -> str:
-    """Return the PDF author(s) as a comma-separated string, or 'Unknown Author' if not present.
-
-    Some PDFs store multiple authors as a Python list representation such as
-    "['Author One', 'Author Two']".  This function converts such values to a
-    plain comma-separated string like "Author One, Author Two".
-    """
+    """Return the PDF author(s), or 'Unknown Author' if not present."""
     if metadata and metadata.author:
-        author = metadata.author
-        stripped = author.strip()
-        if stripped.startswith("[") and stripped.endswith("]"):
-            try:
-                parsed = ast.literal_eval(stripped)
-                if isinstance(parsed, list):
-                    return ", ".join(str(name) for name in parsed)
-            except (ValueError, SyntaxError):
-                pass
-        return author
+        return metadata.author
     return "Unknown Author"
 
 
@@ -214,7 +199,11 @@ def ask_llm_for_metadata(
         result = json.loads(response.choices[0].message.content)
         # Use `or None` to convert empty-string results to None as well as missing keys.
         title = result.get("title") or None
-        author = result.get("author") or None
+        raw_author = result.get("author")
+        if isinstance(raw_author, list):
+            author = ", ".join(str(name) for name in raw_author) if raw_author else None
+        else:
+            author = raw_author or None
         return title, author
     except Exception:  # noqa: BLE001 – treat all LLM errors as unavailable
         return None, None
