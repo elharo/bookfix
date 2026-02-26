@@ -14,6 +14,12 @@ This repository contains **bookfix**, a Python command-line tool that reads PDF 
 - Use type hints for all function signatures.
 - Write docstrings for all public functions.
 - Follow PEP 8 conventions.
+- Names should be as descriptive as possible.
+
+    Avoid Abbreviations: "Do not abbreviate by deleting letters within a word." For example, use image instead of img.
+
+    Exceptions: Abbreviations that are "ubiquitous" or "standard" in the industry, such as i for an iteration index or url for uniform resource locator are allowed.
+  - In general follow Google Python syle guidelines and best practices,
 
 ## Testing
 

@@ -1,15 +1,16 @@
-"""bookfix: reads PDF metadata and prints the title and author(s)."""
+"""bookfix: fills in missing cover author and title in book PDFs."""
 
 import argparse
 import io
 import json
 import urllib.parse
 import urllib.request
-from typing import Optional
+import re
 
 from PIL import Image
 from pypdf import PdfReader, PdfWriter
 from pypdf import DocumentInformation
+from typing import Optional
 
 
 def get_pdf_metadata(filename: str) -> Optional[DocumentInformation]:
@@ -38,6 +39,7 @@ def has_cover(reader: PdfReader) -> bool:
         return False
     return len(reader.pages[0].images) > 0
 
+<<<<<<< HEAD
 
 def fetch_cover_image(title: str, author: str) -> Optional[bytes]:
     """Search Open Library for a book cover and return the image bytes, or None if not found."""
@@ -67,14 +69,25 @@ def add_cover(reader: PdfReader, cover_image_bytes: bytes) -> PdfWriter:
         writer.add_page(page)
     return writer
 
+
 def read_title(reader: PdfReader) -> str:
     """Read the title from the PDF document. Not yet implemented."""
     return "Not Implemented"
 
 
+# Matches 'by <Name>' where each name component starts with a capital letter.
+_AUTHOR_PATTERN = re.compile(r'\bby\s+([A-Z][a-zA-Z\-]+(?:\s+[A-Z][a-zA-Z\-]+)*)')
+
+
 def read_author(reader: PdfReader) -> str:
-    """Read the author from the PDF document. Not yet implemented."""
-    return "Not Implemented"
+    """Read the author from the PDF document content by scanning for 'by <Name>' patterns."""
+    max_pages = min(len(reader.pages), 5)
+    for i in range(max_pages):
+        text = reader.pages[i].extract_text() or ""
+        match = _AUTHOR_PATTERN.search(text)
+        if match:
+            return match.group(1)
+    return "Unknown Author"
 
 
 def main() -> None:
