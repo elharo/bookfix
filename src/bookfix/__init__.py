@@ -4,7 +4,7 @@ import argparse
 import re
 from typing import Optional
 
-from pypdf import PdfReader
+from pypdf import PdfReader, PdfWriter
 from pypdf import DocumentInformation
 
 
@@ -56,11 +56,34 @@ def read_author(reader: PdfReader) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Print the title and author(s) of a PDF file.")
     parser.add_argument("filename", help="Path to the PDF file")
+    parser.add_argument(
+        "--dryrun",
+        action="store_true",
+        help="Print what would be changed without modifying the file.",
+    )
     args = parser.parse_args()
 
-    metadata = get_pdf_metadata(args.filename)
-    print(get_title(metadata))
-    print(get_authors(metadata))
+    reader = PdfReader(args.filename)
+    metadata = reader.metadata
+    title = get_title(metadata)
+    authors = get_authors(metadata)
+
+    updates: dict[str, str] = {}
+    if authors == "Unknown Author":
+        extracted_author = read_author(reader)
+        if extracted_author != "Unknown Author":
+            updates["/Author"] = extracted_author
+
+    if not args.dryrun and updates:
+        writer = PdfWriter()
+        writer.append(args.filename)
+        writer.add_metadata(updates)
+        with open(args.filename, "wb") as f:
+            writer.write(f)
+        authors = updates.get("/Author", authors)
+
+    print(title)
+    print(authors)
 
 
 if __name__ == "__main__":
