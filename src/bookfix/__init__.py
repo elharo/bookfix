@@ -56,11 +56,11 @@ def fetch_cover_image(title: str, author: str) -> Optional[bytes]:
 
 def add_cover(reader: PdfReader, cover_image_bytes: bytes) -> PdfWriter:
     """Return a new PdfWriter with the cover image prepended as the first page."""
-    img = Image.open(io.BytesIO(cover_image_bytes))
-    img_pdf_buf = io.BytesIO()
-    img.save(img_pdf_buf, format="PDF")
-    img_pdf_buf.seek(0)
-    cover_reader = PdfReader(img_pdf_buf)
+    image = Image.open(io.BytesIO(cover_image_bytes))
+    image_pdf_buf = io.BytesIO()
+    image.save(image_pdf_buf, format="PDF")
+    image_pdf_buf.seek(0)
+    cover_reader = PdfReader(image_pdf_buf)
     writer = PdfWriter()
     writer.add_page(cover_reader.pages[0])
     for page in reader.pages:
