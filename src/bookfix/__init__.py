@@ -4,6 +4,7 @@ import argparse
 import io
 import json
 import os
+import sys
 import urllib.parse
 import urllib.request
 import re
@@ -102,6 +103,29 @@ def read_author(reader: PdfReader) -> str:
     return "Unknown Author"
 
 
+def is_llm_available(
+    base_url: str = _DEFAULT_LLM_URL,
+    api_key: Optional[str] = None,
+) -> bool:
+    """Return True if the LLM service at base_url is reachable.
+
+    A connection-level failure (e.g., Ollama not running) returns False.
+    Any other response (including authentication errors) means the service
+    is up and returns True.
+    """
+    from openai import OpenAI, APIConnectionError
+
+    resolved_api_key = api_key or os.environ.get("OPENAI_API_KEY") or "ollama"
+    client = OpenAI(base_url=base_url, api_key=resolved_api_key)
+    try:
+        client.models.list()
+        return True
+    except APIConnectionError:
+        return False
+    except Exception:  # noqa: BLE001 – auth errors etc. mean the server is up
+        return True
+
+
 def ask_llm_for_metadata(
     text: str,
     model: str = _DEFAULT_MODEL,
@@ -112,11 +136,11 @@ def ask_llm_for_metadata(
 
     Uses the OpenAI-compatible chat API, which is supported by Ollama (local),
     OpenAI, and many other model providers.  Returns (title, author), either of
-    which may be None if the LLM cannot determine it or if the LLM is unavailable.
+    which may be None if the LLM cannot determine it.
 
     The ``api_key`` defaults to the ``OPENAI_API_KEY`` environment variable when
-    not supplied explicitly; when talking to a local Ollama instance the value is
-    not checked but a non-empty placeholder is still required by the client.
+    not supplied explicitly.  When talking to a local Ollama instance, the value
+    is not checked, but a non-empty placeholder is still required by the client.
     """
     from openai import OpenAI
 
@@ -177,9 +201,16 @@ def fix_pdf(
             reader.pages[i].extract_text() or "" for i in range(max_pages)
         )
 
-        llm_title, llm_author = ask_llm_for_metadata(
-            pdf_text, model=model, base_url=llm_url, api_key=api_key
-        )
+        if is_llm_available(base_url=llm_url, api_key=api_key):
+            llm_title, llm_author = ask_llm_for_metadata(
+                pdf_text, model=model, base_url=llm_url, api_key=api_key
+            )
+        else:
+            print(
+                f"LLM at {llm_url} is not available; falling back to text heuristics.",
+                file=sys.stderr,
+            )
+            llm_title, llm_author = None, None
 
         if needs_title:
             resolved_title = llm_title or read_title(reader)

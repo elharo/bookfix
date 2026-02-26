@@ -12,7 +12,7 @@ from pypdf.generic import NameObject, DictionaryObject, NumberObject, DecodedStr
 from PIL import Image
 from unittest.mock import patch
 
-from bookfix import get_pdf_metadata, get_title, get_authors, has_cover, read_title, read_author, fetch_cover_image, add_cover, fix_pdf, main, ask_llm_for_metadata
+from bookfix import get_pdf_metadata, get_title, get_authors, has_cover, read_title, read_author, fetch_cover_image, add_cover, fix_pdf, main, ask_llm_for_metadata, is_llm_available
 
 
 def make_pdf(title: str | None = None, author: str | None = None) -> io.BytesIO:
@@ -644,9 +644,10 @@ def test_fix_pdf_uses_llm_for_missing_author() -> None:
     """fix_pdf writes the author returned by the LLM when metadata is absent."""
     path = make_pdf_file(title="My Book")
     try:
-        with patch("bookfix.ask_llm_for_metadata", return_value=(None, "LLM Author")):
-            with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
-                fix_pdf(path, dryrun=False)
+        with patch("bookfix.is_llm_available", return_value=True):
+            with patch("bookfix.ask_llm_for_metadata", return_value=(None, "LLM Author")):
+                with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
+                    fix_pdf(path, dryrun=False)
         reader = PdfReader(path)
         assert reader.metadata is not None
         assert reader.metadata.author == "LLM Author"
@@ -658,9 +659,10 @@ def test_fix_pdf_uses_llm_for_missing_title() -> None:
     """fix_pdf writes the title returned by the LLM when metadata is absent."""
     path = make_pdf_file(author="Jane Doe")
     try:
-        with patch("bookfix.ask_llm_for_metadata", return_value=("LLM Title", None)):
-            with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
-                fix_pdf(path, dryrun=False)
+        with patch("bookfix.is_llm_available", return_value=True):
+            with patch("bookfix.ask_llm_for_metadata", return_value=("LLM Title", None)):
+                with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
+                    fix_pdf(path, dryrun=False)
         reader = PdfReader(path)
         assert reader.metadata is not None
         assert reader.metadata.title == "LLM Title"
@@ -669,7 +671,7 @@ def test_fix_pdf_uses_llm_for_missing_title() -> None:
 
 
 def test_fix_pdf_falls_back_to_regex_when_llm_unavailable() -> None:
-    """fix_pdf falls back to regex when LLM returns (None, None)."""
+    """fix_pdf falls back to regex heuristics when the LLM service is unreachable."""
     writer = PdfWriter()
     page = writer.add_blank_page(width=612, height=792)
     font_dict = DictionaryObject({
@@ -694,7 +696,7 @@ def test_fix_pdf_falls_back_to_regex_when_llm_unavailable() -> None:
         writer.write(file)
         path = file.name
     try:
-        with patch("bookfix.ask_llm_for_metadata", return_value=(None, None)):
+        with patch("bookfix.is_llm_available", return_value=False):
             with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
                 fix_pdf(path, dryrun=False)
         reader = PdfReader(path)
@@ -739,5 +741,53 @@ def test_main_passes_api_key_argument_to_fix_pdf() -> None:
                 main()
         mock_fix.assert_called_once()
         assert mock_fix.call_args.kwargs["api_key"] == "sk-test"
+    finally:
+        os.unlink(path)
+
+
+# --- is_llm_available ---
+
+def test_is_llm_available_returns_true_when_models_list_succeeds() -> None:
+    """is_llm_available returns True when the LLM service responds successfully."""
+    with patch("openai.OpenAI") as mock_openai_class:
+        mock_client = unittest.mock.MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.models.list.return_value = []
+        assert is_llm_available() is True
+
+
+def test_is_llm_available_returns_false_on_connection_error() -> None:
+    """is_llm_available returns False when the LLM service cannot be reached."""
+    from openai import APIConnectionError
+    with patch("openai.OpenAI") as mock_openai_class:
+        mock_client = unittest.mock.MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.models.list.side_effect = APIConnectionError(request=unittest.mock.MagicMock())
+        assert is_llm_available() is False
+
+
+def test_is_llm_available_returns_true_on_auth_error() -> None:
+    """is_llm_available returns True when the server responds with an auth error (service is up)."""
+    from openai import AuthenticationError
+    with patch("openai.OpenAI") as mock_openai_class:
+        mock_client = unittest.mock.MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.models.list.side_effect = AuthenticationError(
+            message="invalid key",
+            response=unittest.mock.MagicMock(status_code=401),
+            body=None,
+        )
+        assert is_llm_available() is True
+
+
+def test_fix_pdf_prints_error_when_llm_unavailable(capsys: pytest.CaptureFixture) -> None:
+    """fix_pdf prints an error to stderr when the LLM is not available."""
+    path = make_pdf_file(title="My Book")
+    try:
+        with patch("bookfix.is_llm_available", return_value=False):
+            with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
+                fix_pdf(path, dryrun=False)
+        captured = capsys.readouterr()
+        assert "not available" in captured.err
     finally:
         os.unlink(path)
