@@ -1,6 +1,6 @@
 # bookfix
 
-bookfix is a command-line tool that reads PDF files and updates titles, author, and cover
+bookfix is a command-line tool that reads PDF files and updates titles, authors, and cover
 based on the content of the PDF.
 
 ## Installation
