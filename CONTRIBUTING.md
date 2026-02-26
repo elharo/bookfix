@@ -14,12 +14,12 @@ cd bookfix
 
 ## Setting Up the Development Environment
 
-Create and activate a virtual environment, then install the required dependencies:
+Create and activate a virtual environment, then install the package in editable mode:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
 ```
 
 On Windows, activate the virtual environment with:
