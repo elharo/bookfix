@@ -875,3 +875,36 @@ def test_fix_pdf_prints_error_when_llm_unavailable(capsys: pytest.CaptureFixture
         assert "not available" in captured.err
     finally:
         os.unlink(path)
+
+
+def test_fix_pdf_preserves_existing_title_when_adding_missing_author() -> None:
+    """fix_pdf preserves existing title metadata when writing a newly found author."""
+    path = make_pdf_file(title="My Existing Title")
+    try:
+        with patch("bookfix.is_llm_available", return_value=True):
+            with patch("bookfix.ask_llm_for_metadata", return_value=(None, "Found Author")):
+                with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
+                    fix_pdf(path, dryrun=False)
+        reader = PdfReader(path)
+        assert reader.metadata is not None
+        assert reader.metadata.title == "My Existing Title"
+        assert reader.metadata.author == "Found Author"
+    finally:
+        os.unlink(path)
+
+
+def test_fix_pdf_preserves_existing_metadata_when_adding_cover() -> None:
+    """fix_pdf preserves title and author metadata when adding a missing cover."""
+    path = make_pdf_file(title="My Book", author="Jane Doe")
+    try:
+        with unittest.mock.patch(
+            "urllib.request.urlopen",
+            side_effect=_fake_urlopen_with_cover(make_jpeg_bytes()),
+        ):
+            fix_pdf(path, dryrun=False)
+        reader = PdfReader(path)
+        assert reader.metadata is not None
+        assert reader.metadata.title == "My Book"
+        assert reader.metadata.author == "Jane Doe"
+    finally:
+        os.unlink(path)

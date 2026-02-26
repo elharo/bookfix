@@ -270,6 +270,8 @@ def fix_pdf(
         else:
             writer = PdfWriter()
             writer.append(filename)
+        if reader.metadata:
+            writer.add_metadata(dict(reader.metadata))
         if updates:
             writer.add_metadata(updates)
         with open(filename, "wb") as f:
