@@ -123,7 +123,6 @@ def test_read_title_returns_not_implemented() -> None:
     assert read_title(reader) == "Not Implemented"
 
 
-<<<<<<< HEAD
 def test_read_author_returns_not_implemented() -> None:
     from pypdf import PdfReader
     reader = PdfReader(make_pdf(author="Jane Doe"))
