@@ -114,10 +114,14 @@ def test_has_cover_returns_false_for_empty_pdf() -> None:
     assert not has_cover(reader)
 
 
-def test_read_title_returns_not_implemented() -> None:
-    from pypdf import PdfReader
-    reader = PdfReader(make_pdf(title="My Book"))
-    assert read_title(reader) == "Not Implemented"
+def test_read_title_returns_first_line_from_content() -> None:
+    reader = make_pdf_with_text("My Great Book")
+    assert read_title(reader) == "My Great Book"
+
+
+def test_read_title_returns_unknown_when_no_content() -> None:
+    reader = PdfReader(make_pdf())
+    assert read_title(reader) == "Unknown Title"
 
 
 def make_pdf_with_text(text: str) -> PdfReader:

@@ -38,8 +38,15 @@ def has_cover(reader: PdfReader) -> bool:
 _AUTHOR_PATTERN = re.compile(r'\bby\s+([A-Z][a-zA-Z\-]+(?:\s+[A-Z][a-zA-Z\-]+)*)')
 
 def read_title(reader: PdfReader) -> str:
-    """Read the title from the PDF document. Not yet implemented."""
-    return "Not Implemented"
+    """Read the title from the PDF document content by returning the first non-empty line."""
+    max_pages = min(len(reader.pages), 5)
+    for i in range(max_pages):
+        text = reader.pages[i].extract_text() or ""
+        for line in text.splitlines():
+            line = line.strip()
+            if line:
+                return line
+    return "Unknown Title"
 
 
 def read_author(reader: PdfReader) -> str:
