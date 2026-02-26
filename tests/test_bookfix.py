@@ -277,7 +277,8 @@ def test_main_dryrun_does_not_modify_file() -> None:
     try:
         last_modified_time_before = os.path.getmtime(path)
         with patch("sys.argv", ["bookfix", "--dryrun", path]):
-            main()
+            with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
+                main()
         last_modified_time_after = os.path.getmtime(path)
         assert last_modified_time_before == last_modified_time_after
     finally:
@@ -289,7 +290,8 @@ def test_main_dryrun_prints_title_and_author(capsys: pytest.CaptureFixture) -> N
     path = make_pdf_file(title="My Book", author="Jane Doe")
     try:
         with patch("sys.argv", ["bookfix", "--dryrun", path]):
-            main()
+            with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
+                main()
         captured = capsys.readouterr()
         assert "My Book" in captured.out
         assert "Jane Doe" in captured.out
@@ -327,7 +329,8 @@ def test_main_dryrun_prints_extracted_author_when_metadata_missing(
         path = file.name
     try:
         with patch("sys.argv", ["bookfix", "--dryrun", path]):
-            main()
+            with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
+                main()
         captured = capsys.readouterr()
         assert "Jane Doe" in captured.out
     finally:
@@ -362,10 +365,132 @@ def test_main_without_dryrun_writes_missing_author_to_file() -> None:
         path = f.name
     try:
         with patch("sys.argv", ["bookfix", path]):
-            main()
+            with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
+                main()
         reader = PdfReader(path)
         metadata = reader.metadata
         assert metadata is not None
         assert metadata.author == "Jane Doe"
+    finally:
+        os.unlink(path)
+
+
+def _fake_urlopen_with_cover(cover_bytes: bytes):
+    """Return a fake urlopen that returns a cover image for cover URLs."""
+    search_response = json.dumps({"docs": [{"cover_i": 99999}]}).encode()
+
+    def fake_urlopen(url):
+        mock_response = unittest.mock.MagicMock()
+        if "search.json" in url:
+            mock_response.read.return_value = search_response
+        else:
+            mock_response.read.return_value = cover_bytes
+        mock_response.__enter__ = lambda s: s
+        mock_response.__exit__ = unittest.mock.MagicMock(return_value=False)
+        return mock_response
+
+    return fake_urlopen
+
+
+def _fake_urlopen_no_cover():
+    """Return a fake urlopen that returns no cover (empty docs)."""
+    search_response = json.dumps({"docs": []}).encode()
+
+    def fake_urlopen(url):
+        mock_response = unittest.mock.MagicMock()
+        mock_response.read.return_value = search_response
+        mock_response.__enter__ = lambda s: s
+        mock_response.__exit__ = unittest.mock.MagicMock(return_value=False)
+        return mock_response
+
+    return fake_urlopen
+
+
+def test_main_dryrun_prints_cover_found_when_cover_missing_and_found(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Test that --dryrun prints 'Cover found' when PDF has no cover but one is available."""
+    path = make_pdf_file(title="My Book", author="Jane Doe")
+    try:
+        with patch("sys.argv", ["bookfix", "--dryrun", path]):
+            with unittest.mock.patch(
+                "urllib.request.urlopen",
+                side_effect=_fake_urlopen_with_cover(make_jpeg_bytes()),
+            ):
+                main()
+        captured = capsys.readouterr()
+        assert "Cover found" in captured.out
+    finally:
+        os.unlink(path)
+
+
+def test_main_dryrun_prints_cover_not_found_when_cover_missing_and_not_found(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Test that --dryrun prints 'Cover not found' when PDF has no cover and none is available."""
+    path = make_pdf_file(title="My Book", author="Jane Doe")
+    try:
+        with patch("sys.argv", ["bookfix", "--dryrun", path]):
+            with unittest.mock.patch(
+                "urllib.request.urlopen",
+                side_effect=_fake_urlopen_no_cover(),
+            ):
+                main()
+        captured = capsys.readouterr()
+        assert "Cover not found" in captured.out
+    finally:
+        os.unlink(path)
+
+
+def test_main_dryrun_does_not_modify_file_when_cover_found(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Test that --dryrun does not modify the file even when a cover is found."""
+    path = make_pdf_file(title="My Book", author="Jane Doe")
+    try:
+        last_modified_time_before = os.path.getmtime(path)
+        with patch("sys.argv", ["bookfix", "--dryrun", path]):
+            with unittest.mock.patch(
+                "urllib.request.urlopen",
+                side_effect=_fake_urlopen_with_cover(make_jpeg_bytes()),
+            ):
+                main()
+        last_modified_time_after = os.path.getmtime(path)
+        assert last_modified_time_before == last_modified_time_after
+    finally:
+        os.unlink(path)
+
+
+def test_main_adds_cover_to_pdf_when_missing() -> None:
+    """Test that without --dryrun, a missing cover is added to the PDF file."""
+    path = make_pdf_file(title="My Book", author="Jane Doe")
+    try:
+        reader_before = PdfReader(path)
+        assert not has_cover(reader_before)
+        with patch("sys.argv", ["bookfix", path]):
+            with unittest.mock.patch(
+                "urllib.request.urlopen",
+                side_effect=_fake_urlopen_with_cover(make_jpeg_bytes()),
+            ):
+                main()
+        reader_after = PdfReader(path)
+        assert has_cover(reader_after)
+    finally:
+        os.unlink(path)
+
+
+def test_main_does_not_add_cover_when_cover_not_found() -> None:
+    """Test that without --dryrun, the PDF is not modified when no cover is found."""
+    path = make_pdf_file(title="My Book", author="Jane Doe")
+    try:
+        last_modified_time_before = os.path.getmtime(path)
+        with patch("sys.argv", ["bookfix", path]):
+            with unittest.mock.patch(
+                "urllib.request.urlopen",
+                side_effect=_fake_urlopen_no_cover(),
+            ):
+                main()
+        last_modified_time_after = os.path.getmtime(path)
+        assert last_modified_time_before == last_modified_time_after
     finally:
         os.unlink(path)
