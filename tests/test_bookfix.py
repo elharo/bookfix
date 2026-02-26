@@ -369,16 +369,16 @@ def test_main_dryrun_does_not_modify_file() -> None:
         os.unlink(path)
 
 
-def test_main_dryrun_prints_title_and_author(capsys: pytest.CaptureFixture) -> None:
-    """Test that --dryrun prints the title and author from metadata."""
+def test_main_dryrun_skips_existing_metadata(capsys: pytest.CaptureFixture) -> None:
+    """Test that --dryrun does not print title or author when they are already present in metadata."""
     path = make_pdf_file(title="My Book", author="Jane Doe")
     try:
         with patch("sys.argv", ["bookfix", "--dryrun", path]):
             with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
                 main()
         captured = capsys.readouterr()
-        assert "My Book" in captured.out
-        assert "Jane Doe" in captured.out
+        assert "My Book" not in captured.out
+        assert "Jane Doe" not in captured.out
     finally:
         os.unlink(path)
 

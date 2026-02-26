@@ -280,8 +280,10 @@ def fix_pdf(
             writer.write(f)
 
     if dryrun:
-        print(title)
-        print(authors)
+        if "/Title" in updates:
+            print(updates["/Title"])
+        if "/Author" in updates:
+            print(updates["/Author"])
         if cover_missing:
             if cover_image_bytes:
                 print("Cover found")
