@@ -27,6 +27,11 @@ On Windows, activate the virtual environment with:
 ```bat
 .venv\Scripts\activate
 ```
+## Running the requirement.txt
+
+```bash
+pip install -r requirements.txt
+```
 
 ## Running the Tests
 
