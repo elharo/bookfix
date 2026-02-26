@@ -144,14 +144,14 @@ def test_fetch_cover_image_returns_bytes_when_cover_found() -> None:
     cover_bytes = make_jpeg_bytes()
 
     def fake_urlopen(url):
-        mock_resp = unittest.mock.MagicMock()
+        mock_response = unittest.mock.MagicMock()
         if "search.json" in url:
-            mock_resp.read.return_value = search_response
+            mock_response.read.return_value = search_response
         else:
-            mock_resp.read.return_value = cover_bytes
-        mock_resp.__enter__ = lambda s: s
-        mock_resp.__exit__ = unittest.mock.MagicMock(return_value=False)
-        return mock_resp
+            mock_response.read.return_value = cover_bytes
+        mock_response.__enter__ = lambda s: s
+        mock_response.__exit__ = unittest.mock.MagicMock(return_value=False)
+        return mock_response
 
     with unittest.mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
         result = fetch_cover_image("Some Book", "Some Author")
@@ -162,12 +162,12 @@ def test_fetch_cover_image_returns_bytes_when_cover_found() -> None:
 def test_fetch_cover_image_returns_none_when_no_docs() -> None:
     search_response = json.dumps({"docs": []}).encode()
 
-    mock_resp = unittest.mock.MagicMock()
-    mock_resp.read.return_value = search_response
-    mock_resp.__enter__ = lambda s: s
-    mock_resp.__exit__ = unittest.mock.MagicMock(return_value=False)
+    mock_response = unittest.mock.MagicMock()
+    mock_response.read.return_value = search_response
+    mock_response.__enter__ = lambda s: s
+    mock_response.__exit__ = unittest.mock.MagicMock(return_value=False)
 
-    with unittest.mock.patch("urllib.request.urlopen", return_value=mock_resp):
+    with unittest.mock.patch("urllib.request.urlopen", return_value=mock_response):
         result = fetch_cover_image("Unknown Book", "Unknown Author")
 
     assert result is None
@@ -176,12 +176,12 @@ def test_fetch_cover_image_returns_none_when_no_docs() -> None:
 def test_fetch_cover_image_returns_none_when_no_cover_id() -> None:
     search_response = json.dumps({"docs": [{"title": "Some Book"}]}).encode()
 
-    mock_resp = unittest.mock.MagicMock()
-    mock_resp.read.return_value = search_response
-    mock_resp.__enter__ = lambda s: s
-    mock_resp.__exit__ = unittest.mock.MagicMock(return_value=False)
+    mock_response = unittest.mock.MagicMock()
+    mock_response.read.return_value = search_response
+    mock_response.__enter__ = lambda s: s
+    mock_response.__exit__ = unittest.mock.MagicMock(return_value=False)
 
-    with unittest.mock.patch("urllib.request.urlopen", return_value=mock_resp):
+    with unittest.mock.patch("urllib.request.urlopen", return_value=mock_response):
         result = fetch_cover_image("Some Book", "Some Author")
 
     assert result is None
