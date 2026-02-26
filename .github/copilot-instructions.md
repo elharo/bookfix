@@ -5,9 +5,9 @@ This repository contains **bookfix**, a Python command-line tool that reads PDF 
 ## Project Overview
 
 - **Language**: Python
-- **Main module**: `bookfix.py`
-- **Tests**: `test_bookfix.py` (pytest)
-- **Dependencies**: `pypdf`, `pytest` (see `requirements.txt`)
+- **Main module**: `src/bookfix/__init__.py`
+- **Tests**: `tests/test_bookfix.py` (pytest)
+- **Dependencies**: `pypdf`, `Pillow`, `pytest` (see `requirements.txt`)
 
 ## Code Style
 
@@ -23,9 +23,9 @@ This repository contains **bookfix**, a Python command-line tool that reads PDF 
 
 ## Testing
 
-- Tests use `pytest` and are located in `test_bookfix.py`.
+- Tests use `pytest` and are located in `tests/test_bookfix.py`.
 - Use `pypdf.PdfWriter` to create in-memory PDF fixtures for tests rather than relying on files on disk.
-- Run tests with: `pytest`
+- Run tests with: `python -m pytest`
 - Use test first programming. Make sure you have a failing test before fixing a bug or implementing a new feature.
 
 ## Key Patterns
