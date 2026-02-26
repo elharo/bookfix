@@ -1,26 +1,18 @@
 """pytest unit tests for bookfix.py"""
 
 import io
-<<<<<<< HEAD
+import json
 import os
 import tempfile
-=======
-import json
 import unittest.mock
->>>>>>> main
 import pytest
 from pypdf import PdfWriter, PdfReader
 from pypdf import DocumentInformation
 from pypdf.generic import NameObject, DictionaryObject, NumberObject, DecodedStreamObject
-<<<<<<< HEAD
+from PIL import Image
 from unittest.mock import patch
 
-from bookfix import get_pdf_metadata, get_title, get_authors, has_cover, read_title, read_author, main
-=======
-from PIL import Image
-
-from bookfix import get_pdf_metadata, get_title, get_authors, has_cover, read_title, read_author, fetch_cover_image, add_cover
->>>>>>> main
+from bookfix import get_pdf_metadata, get_title, get_authors, has_cover, read_title, read_author, fetch_cover_image, add_cover, main
 
 
 def make_pdf(title: str | None = None, author: str | None = None) -> io.BytesIO:

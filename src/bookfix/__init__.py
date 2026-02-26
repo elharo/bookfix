@@ -7,10 +7,7 @@ import urllib.parse
 import urllib.request
 import re
 
-<<<<<<< HEAD
-=======
 from PIL import Image
->>>>>>> main
 from pypdf import PdfReader, PdfWriter
 from pypdf import DocumentInformation
 from typing import Optional
