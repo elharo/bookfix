@@ -82,8 +82,9 @@ def main() -> None:
             writer.write(f)
         authors = updates.get("/Author", authors)
 
-    print(title)
-    print(authors)
+    if args.dryrun:
+        print(title)
+        print(authors)
 
 
 if __name__ == "__main__":

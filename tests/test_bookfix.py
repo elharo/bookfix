@@ -173,10 +173,10 @@ def make_pdf_file(title: str | None = None, author: str | None = None) -> str:
 
     The caller is responsible for deleting the file using os.unlink().
     """
-    buf = make_pdf(title=title, author=author)
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
-        f.write(buf.read())
-        return f.name
+    buffer = make_pdf(title=title, author=author)
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as file:
+        file.write(buffer.read())
+        return file.name
 
 
 # --- main() --dryrun ---
@@ -185,11 +185,11 @@ def test_main_dryrun_does_not_modify_file() -> None:
     """Test that --dryrun does not modify the PDF file on disk."""
     path = make_pdf_file(title="My Book", author="Jane Doe")
     try:
-        mtime_before = os.path.getmtime(path)
+        last_modified_time_before = os.path.getmtime(path)
         with patch("sys.argv", ["bookfix", "--dryrun", path]):
             main()
-        mtime_after = os.path.getmtime(path)
-        assert mtime_before == mtime_after
+        last_modified_time_after = os.path.getmtime(path)
+        assert last_modified_time_before == last_modified_time_after
     finally:
         os.unlink(path)
 
