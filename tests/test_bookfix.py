@@ -529,6 +529,17 @@ def test_main_adds_cover_to_pdf_when_missing() -> None:
         os.unlink(path)
 
 
+def test_main_prints_error_for_missing_file(capsys: pytest.CaptureFixture) -> None:
+    """Test that main() prints a user-friendly error when the file does not exist."""
+    with patch("sys.argv", ["bookfix", "/nonexistent/path/file.pdf"]):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+    assert exc_info.value.code != 0
+    captured = capsys.readouterr()
+    assert "file.pdf" in captured.err
+    assert "File not found:" in captured.err
+
+
 def test_main_does_not_add_cover_when_cover_not_found() -> None:
     """Test that without --dryrun, the PDF is not modified when no cover is found."""
     path = make_pdf_file(title="My Book", author="Jane Doe")
