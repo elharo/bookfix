@@ -120,16 +120,30 @@ def main() -> None:
     if updates:
         authors = updates.get("/Author", authors)
 
-    if not args.dryrun and updates:
-        writer = PdfWriter()
-        writer.append(args.filename)
-        writer.add_metadata(updates)
+    cover_missing = not has_cover(reader)
+    cover_image_bytes: Optional[bytes] = None
+    if cover_missing:
+        cover_image_bytes = fetch_cover_image(title, authors)
+
+    if not args.dryrun and (updates or cover_image_bytes):
+        if cover_image_bytes:
+            writer = add_cover(reader, cover_image_bytes)
+        else:
+            writer = PdfWriter()
+            writer.append(args.filename)
+        if updates:
+            writer.add_metadata(updates)
         with open(args.filename, "wb") as f:
             writer.write(f)
 
     if args.dryrun:
         print(title)
         print(authors)
+        if cover_missing:
+            if cover_image_bytes:
+                print("Cover found")
+            else:
+                print("Cover not found")
 
 
 if __name__ == "__main__":
