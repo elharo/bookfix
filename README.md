@@ -30,8 +30,6 @@ For example:
 python bookfix.py mybook.pdf
 ```
 
-## Running the Tests
+## Contributing
 
-```
-pytest
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for instructions on how to set up the development environment and run the tests.
