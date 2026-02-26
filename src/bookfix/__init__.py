@@ -74,13 +74,15 @@ def main() -> None:
         if extracted_author != "Unknown Author":
             updates["/Author"] = extracted_author
 
+    if updates:
+        authors = updates.get("/Author", authors)
+
     if not args.dryrun and updates:
         writer = PdfWriter()
         writer.append(args.filename)
         writer.add_metadata(updates)
         with open(args.filename, "wb") as f:
             writer.write(f)
-        authors = updates.get("/Author", authors)
 
     if args.dryrun:
         print(title)

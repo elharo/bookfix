@@ -207,6 +207,43 @@ def test_main_dryrun_prints_title_and_author(capsys: pytest.CaptureFixture) -> N
         os.unlink(path)
 
 
+def test_main_dryrun_prints_extracted_author_when_metadata_missing(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Test that --dryrun prints the would-be-written author extracted from content."""
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=612, height=792)
+
+    font_dict = DictionaryObject({
+        NameObject("/Type"): NameObject("/Font"),
+        NameObject("/Subtype"): NameObject("/Type1"),
+        NameObject("/BaseFont"): NameObject("/Helvetica"),
+        NameObject("/Encoding"): NameObject("/WinAnsiEncoding"),
+    })
+    if "/Resources" not in page:
+        page[NameObject("/Resources")] = DictionaryObject()
+    resources = page["/Resources"]
+    if "/Font" not in resources:
+        resources[NameObject("/Font")] = DictionaryObject()
+    resources["/Font"][NameObject("/F1")] = font_dict
+    content = b"BT /F1 12 Tf 100 700 Td (by Jane Doe) Tj ET"
+    stream = DecodedStreamObject()
+    stream.set_data(content)
+    page[NameObject("/Contents")] = stream
+    writer.add_metadata({"/Title": "My Book"})
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as file:
+        writer.write(file)
+        path = file.name
+    try:
+        with patch("sys.argv", ["bookfix", "--dryrun", path]):
+            main()
+        captured = capsys.readouterr()
+        assert "Jane Doe" in captured.out
+    finally:
+        os.unlink(path)
+
+
 def test_main_without_dryrun_writes_missing_author_to_file() -> None:
     """Test that without --dryrun, a missing author extracted from content is written to the file."""
     writer = PdfWriter()
