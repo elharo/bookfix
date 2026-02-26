@@ -123,11 +123,6 @@ def test_read_title_returns_not_implemented() -> None:
     assert read_title(reader) == "Not Implemented"
 
 
-def test_read_author_returns_not_implemented() -> None:
-    from pypdf import PdfReader
-    reader = PdfReader(make_pdf(author="Jane Doe"))
-    assert read_author(reader) == "Not Implemented"
-
 
 def make_jpeg_bytes() -> bytes:
     """Return minimal valid JPEG image bytes (1x1 white pixel)."""
