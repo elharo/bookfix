@@ -12,7 +12,7 @@ from pypdf.generic import NameObject, DictionaryObject, NumberObject, DecodedStr
 from PIL import Image
 from unittest.mock import patch
 
-from bookfix import get_pdf_metadata, get_title, get_authors, has_cover, read_title, read_author, fetch_cover_image, add_cover, fix_pdf, main
+from bookfix import get_pdf_metadata, get_title, get_authors, has_cover, read_title, read_author, fetch_cover_image, add_cover, fix_pdf, main, ask_llm_for_metadata
 
 
 def make_pdf(title: str | None = None, author: str | None = None) -> io.BytesIO:
@@ -553,5 +553,191 @@ def test_main_does_not_add_cover_when_cover_not_found() -> None:
                 main()
         last_modified_time_after = os.path.getmtime(path)
         assert last_modified_time_before == last_modified_time_after
+    finally:
+        os.unlink(path)
+
+
+# --- ask_llm_for_metadata ---
+
+def _make_mock_llm_response(title: str | None, author: str | None) -> unittest.mock.MagicMock:
+    """Return a mock OpenAI chat completion whose content is the given JSON."""
+    content = json.dumps({"title": title, "author": author})
+    message = unittest.mock.MagicMock()
+    message.content = content
+    choice = unittest.mock.MagicMock()
+    choice.message = message
+    response = unittest.mock.MagicMock()
+    response.choices = [choice]
+    return response
+
+
+def test_ask_llm_for_metadata_returns_title_and_author() -> None:
+    """ask_llm_for_metadata returns title and author from a successful LLM response."""
+    mock_response = _make_mock_llm_response("Great Book", "Jane Doe")
+    with patch("openai.OpenAI") as mock_openai_class:
+        mock_client = unittest.mock.MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.chat.completions.create.return_value = mock_response
+        title, author = ask_llm_for_metadata("some pdf text")
+    assert title == "Great Book"
+    assert author == "Jane Doe"
+
+
+def test_ask_llm_for_metadata_returns_none_on_connection_error() -> None:
+    """ask_llm_for_metadata returns (None, None) when the LLM is unreachable."""
+    with patch("openai.OpenAI") as mock_openai_class:
+        mock_client = unittest.mock.MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = Exception("connection refused")
+        title, author = ask_llm_for_metadata("some pdf text")
+    assert title is None
+    assert author is None
+
+
+def test_ask_llm_for_metadata_returns_none_for_null_values() -> None:
+    """ask_llm_for_metadata returns (None, None) when the LLM returns null fields."""
+    mock_response = _make_mock_llm_response(None, None)
+    with patch("openai.OpenAI") as mock_openai_class:
+        mock_client = unittest.mock.MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.chat.completions.create.return_value = mock_response
+        title, author = ask_llm_for_metadata("some pdf text")
+    assert title is None
+    assert author is None
+
+
+def test_ask_llm_for_metadata_uses_provided_model_and_url() -> None:
+    """ask_llm_for_metadata passes model and base_url through to the OpenAI client."""
+    mock_response = _make_mock_llm_response("T", "A")
+    with patch("openai.OpenAI") as mock_openai_class:
+        mock_client = unittest.mock.MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.chat.completions.create.return_value = mock_response
+        ask_llm_for_metadata(
+            "text",
+            model="mistral",
+            base_url="http://localhost:1234/v1",
+            api_key="mykey",
+        )
+        mock_openai_class.assert_called_once_with(
+            base_url="http://localhost:1234/v1", api_key="mykey"
+        )
+        call_kwargs = mock_client.chat.completions.create.call_args
+        assert call_kwargs.kwargs["model"] == "mistral"
+
+
+def test_ask_llm_for_metadata_uses_env_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ask_llm_for_metadata reads the API key from OPENAI_API_KEY when not supplied."""
+    monkeypatch.setenv("OPENAI_API_KEY", "env-key-123")
+    mock_response = _make_mock_llm_response("T", "A")
+    with patch("openai.OpenAI") as mock_openai_class:
+        mock_client = unittest.mock.MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.chat.completions.create.return_value = mock_response
+        ask_llm_for_metadata("text")
+        mock_openai_class.assert_called_once_with(
+            base_url=unittest.mock.ANY, api_key="env-key-123"
+        )
+
+
+def test_fix_pdf_uses_llm_for_missing_author() -> None:
+    """fix_pdf writes the author returned by the LLM when metadata is absent."""
+    path = make_pdf_file(title="My Book")
+    try:
+        with patch("bookfix.ask_llm_for_metadata", return_value=(None, "LLM Author")):
+            with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
+                fix_pdf(path, dryrun=False)
+        reader = PdfReader(path)
+        assert reader.metadata is not None
+        assert reader.metadata.author == "LLM Author"
+    finally:
+        os.unlink(path)
+
+
+def test_fix_pdf_uses_llm_for_missing_title() -> None:
+    """fix_pdf writes the title returned by the LLM when metadata is absent."""
+    path = make_pdf_file(author="Jane Doe")
+    try:
+        with patch("bookfix.ask_llm_for_metadata", return_value=("LLM Title", None)):
+            with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
+                fix_pdf(path, dryrun=False)
+        reader = PdfReader(path)
+        assert reader.metadata is not None
+        assert reader.metadata.title == "LLM Title"
+    finally:
+        os.unlink(path)
+
+
+def test_fix_pdf_falls_back_to_regex_when_llm_unavailable() -> None:
+    """fix_pdf falls back to regex when LLM returns (None, None)."""
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=612, height=792)
+    font_dict = DictionaryObject({
+        NameObject("/Type"): NameObject("/Font"),
+        NameObject("/Subtype"): NameObject("/Type1"),
+        NameObject("/BaseFont"): NameObject("/Helvetica"),
+        NameObject("/Encoding"): NameObject("/WinAnsiEncoding"),
+    })
+    if "/Resources" not in page:
+        page[NameObject("/Resources")] = DictionaryObject()
+    resources = page["/Resources"]
+    if "/Font" not in resources:
+        resources[NameObject("/Font")] = DictionaryObject()
+    resources["/Font"][NameObject("/F1")] = font_dict
+    content = b"BT /F1 12 Tf 100 700 Td (by Bob Smith) Tj ET"
+    stream = DecodedStreamObject()
+    stream.set_data(content)
+    page[NameObject("/Contents")] = stream
+    writer.add_metadata({"/Title": "Fallback Book"})
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as file:
+        writer.write(file)
+        path = file.name
+    try:
+        with patch("bookfix.ask_llm_for_metadata", return_value=(None, None)):
+            with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
+                fix_pdf(path, dryrun=False)
+        reader = PdfReader(path)
+        assert reader.metadata is not None
+        assert reader.metadata.author == "Bob Smith"
+    finally:
+        os.unlink(path)
+
+
+def test_main_passes_model_argument_to_fix_pdf() -> None:
+    """--model CLI argument is forwarded to fix_pdf."""
+    path = make_pdf_file(title="My Book", author="Jane Doe")
+    try:
+        with patch("bookfix.fix_pdf") as mock_fix:
+            with patch("sys.argv", ["bookfix", "--model", "mistral", path]):
+                main()
+        mock_fix.assert_called_once()
+        assert mock_fix.call_args.kwargs["model"] == "mistral"
+    finally:
+        os.unlink(path)
+
+
+def test_main_passes_llm_url_argument_to_fix_pdf() -> None:
+    """--llm-url CLI argument is forwarded to fix_pdf."""
+    path = make_pdf_file(title="My Book", author="Jane Doe")
+    try:
+        with patch("bookfix.fix_pdf") as mock_fix:
+            with patch("sys.argv", ["bookfix", "--llm-url", "http://example.com/v1", path]):
+                main()
+        mock_fix.assert_called_once()
+        assert mock_fix.call_args.kwargs["llm_url"] == "http://example.com/v1"
+    finally:
+        os.unlink(path)
+
+
+def test_main_passes_api_key_argument_to_fix_pdf() -> None:
+    """--api-key CLI argument is forwarded to fix_pdf."""
+    path = make_pdf_file(title="My Book", author="Jane Doe")
+    try:
+        with patch("bookfix.fix_pdf") as mock_fix:
+            with patch("sys.argv", ["bookfix", "--api-key", "sk-test", path]):
+                main()
+        mock_fix.assert_called_once()
+        assert mock_fix.call_args.kwargs["api_key"] == "sk-test"
     finally:
         os.unlink(path)

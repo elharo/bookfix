@@ -1,3 +1,4 @@
 pypdf
 Pillow
+openai
 pytest

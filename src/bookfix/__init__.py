@@ -3,6 +3,7 @@
 import argparse
 import io
 import json
+import os
 import urllib.parse
 import urllib.request
 import re
@@ -11,6 +12,11 @@ from PIL import Image
 from pypdf import PdfReader, PdfWriter
 from pypdf import DocumentInformation
 from typing import Optional
+
+# Default URL for a locally running Ollama instance (OpenAI-compatible API).
+_DEFAULT_LLM_URL = "http://localhost:11434/v1"
+# A sensible default open-weight model available in Ollama.
+_DEFAULT_MODEL = "llama3.2"
 
 
 def get_pdf_metadata(filename: str) -> Optional[DocumentInformation]:
@@ -96,10 +102,65 @@ def read_author(reader: PdfReader) -> str:
     return "Unknown Author"
 
 
-def fix_pdf(filename: str, dryrun: bool) -> None:
+def ask_llm_for_metadata(
+    text: str,
+    model: str = _DEFAULT_MODEL,
+    base_url: str = _DEFAULT_LLM_URL,
+    api_key: Optional[str] = None,
+) -> tuple[Optional[str], Optional[str]]:
+    """Ask an LLM to identify the title and author from PDF text.
+
+    Uses the OpenAI-compatible chat API, which is supported by Ollama (local),
+    OpenAI, and many other model providers.  Returns (title, author), either of
+    which may be None if the LLM cannot determine it or if the LLM is unavailable.
+
+    The ``api_key`` defaults to the ``OPENAI_API_KEY`` environment variable when
+    not supplied explicitly; when talking to a local Ollama instance the value is
+    not checked but a non-empty placeholder is still required by the client.
+    """
+    from openai import OpenAI
+
+    resolved_api_key = api_key or os.environ.get("OPENAI_API_KEY") or "ollama"
+
+    client = OpenAI(base_url=base_url, api_key=resolved_api_key)
+
+    prompt = (
+        "From the following text extracted from a PDF, identify the book's title"
+        " and author(s).\n\n"
+        f"Text:\n{text[:3000]}\n\n"
+        "Respond ONLY with a JSON object using exactly these keys:\n"
+        '{"title": "...", "author": "..."}\n'
+        "Use null for any value you cannot determine."
+    )
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+        )
+        result = json.loads(response.choices[0].message.content)
+        # Use `or None` to convert empty-string results to None as well as missing keys.
+        title = result.get("title") or None
+        author = result.get("author") or None
+        return title, author
+    except Exception:  # noqa: BLE001 – treat all LLM errors as unavailable
+        return None, None
+
+
+def fix_pdf(
+    filename: str,
+    dryrun: bool,
+    model: str = _DEFAULT_MODEL,
+    llm_url: str = _DEFAULT_LLM_URL,
+    api_key: Optional[str] = None,
+) -> None:
     """Fix missing title, author, and cover in a PDF file.
 
     If dryrun is True, print what would be changed without modifying the file.
+    The LLM identified by *model* at *llm_url* is used to extract missing
+    metadata from the PDF text.  Falls back to regex heuristics when the LLM
+    is unavailable.
     """
     reader = PdfReader(filename)
     metadata = reader.metadata
@@ -107,13 +168,32 @@ def fix_pdf(filename: str, dryrun: bool) -> None:
     authors = get_authors(metadata)
 
     updates: dict[str, str] = {}
-    if authors == "Unknown Author":
-        extracted_author = read_author(reader)
-        if extracted_author != "Unknown Author":
-            updates["/Author"] = extracted_author
+    needs_title = title == "Unknown Title"
+    needs_author = authors == "Unknown Author"
+
+    if needs_title or needs_author:
+        max_pages = min(len(reader.pages), 5)
+        pdf_text = "\n".join(
+            reader.pages[i].extract_text() or "" for i in range(max_pages)
+        )
+
+        llm_title, llm_author = ask_llm_for_metadata(
+            pdf_text, model=model, base_url=llm_url, api_key=api_key
+        )
+
+        if needs_title:
+            resolved_title = llm_title or read_title(reader)
+            if resolved_title != "Unknown Title":
+                updates["/Title"] = resolved_title
+
+        if needs_author:
+            resolved_author = llm_author or read_author(reader)
+            if resolved_author != "Unknown Author":
+                updates["/Author"] = resolved_author
 
     if updates:
         authors = updates.get("/Author", authors)
+        title = updates.get("/Title", title)
 
     cover_missing = not has_cover(reader)
     cover_image_bytes: Optional[bytes] = None
@@ -149,9 +229,41 @@ def main() -> None:
         action="store_true",
         help="Print what would be changed without modifying the file.",
     )
+    parser.add_argument(
+        "--model",
+        default=_DEFAULT_MODEL,
+        help=(
+            f"LLM model to use for metadata extraction (default: {_DEFAULT_MODEL})."
+            " Any model available at the configured --llm-url may be specified."
+        ),
+    )
+    parser.add_argument(
+        "--llm-url",
+        default=_DEFAULT_LLM_URL,
+        dest="llm_url",
+        help=(
+            f"Base URL of the OpenAI-compatible LLM API (default: {_DEFAULT_LLM_URL})."
+            " Use this to point at a remote OpenAI endpoint or another local server."
+        ),
+    )
+    parser.add_argument(
+        "--api-key",
+        default=None,
+        dest="api_key",
+        help=(
+            "API key for the LLM service.  Defaults to the OPENAI_API_KEY"
+            " environment variable.  Not required for local Ollama instances."
+        ),
+    )
     args = parser.parse_args()
     try:
-        fix_pdf(args.filename, args.dryrun)
+        fix_pdf(
+            args.filename,
+            args.dryrun,
+            model=args.model,
+            llm_url=args.llm_url,
+            api_key=args.api_key,
+        )
     except FileNotFoundError:
         parser.error(f"File not found: {args.filename}")
 

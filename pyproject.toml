@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "bookfix"
 version = "0.1.0"
-dependencies = ["pypdf", "Pillow"]
+dependencies = ["pypdf", "Pillow", "openai"]
 
 [project.scripts]
 bookfix = "bookfix:main"
