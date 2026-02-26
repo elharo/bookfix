@@ -149,7 +149,7 @@ def ask_llm_for_metadata(
     client = OpenAI(base_url=base_url, api_key=resolved_api_key)
 
     prompt = (
-        "From the following text extracted from a PDF, identify the book's title"
+        "From the text extracted from a PDF, identify the book's title"
         " and author(s).\n\n"
         f"Text:\n{text[:3000]}\n\n"
         "Respond ONLY with a JSON object using exactly these keys:\n"
@@ -282,8 +282,8 @@ def main() -> None:
         default=None,
         dest="api_key",
         help=(
-            "API key for the LLM service.  Defaults to the OPENAI_API_KEY"
-            " environment variable.  Not required for local Ollama instances."
+            "API key for the LLM service. Defaults to the OPENAI_API_KEY"
+            " environment variable. Not required for local Ollama instances."
         ),
     )
     args = parser.parse_args()
