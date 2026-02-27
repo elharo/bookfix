@@ -12,7 +12,7 @@ from pypdf.generic import NameObject, DictionaryObject, NumberObject, DecodedStr
 from PIL import Image
 from unittest.mock import patch
 
-from bookfix import get_pdf_metadata, get_title, get_authors, has_cover, read_title, read_author, fetch_cover_image, add_cover, fix_pdf, main, ask_llm_for_metadata, is_llm_available
+from bookfix import get_pdf_metadata, get_title, get_authors, has_cover, read_title, read_author, fetch_cover_image, add_cover, fix_pdf, main, ask_llm_for_metadata, is_llm_available, is_software_name, ask_llm_for_best_author
 
 
 def make_pdf(title: str | None = None, author: str | None = None) -> io.BytesIO:
@@ -891,5 +891,161 @@ def test_fix_pdf_prints_error_when_llm_unavailable(capsys: pytest.CaptureFixture
                 fix_pdf(path, dryrun=False)
         captured = capsys.readouterr()
         assert "not available" in captured.err
+    finally:
+        os.unlink(path)
+
+
+# --- is_software_name ---
+
+def test_is_software_name_returns_true_for_adobe_acrobat() -> None:
+    """is_software_name returns True for a well-known PDF software name."""
+    assert is_software_name("Adobe Acrobat 11.0") is True
+
+
+def test_is_software_name_returns_true_for_microsoft_word() -> None:
+    """is_software_name returns True for Microsoft Word."""
+    assert is_software_name("Microsoft Word") is True
+
+
+def test_is_software_name_returns_true_for_latex() -> None:
+    """is_software_name returns True for LaTeX."""
+    assert is_software_name("LaTeX") is True
+
+
+def test_is_software_name_returns_false_for_person_name() -> None:
+    """is_software_name returns False for a real person's name."""
+    assert is_software_name("Jane Doe") is False
+
+
+def test_is_software_name_returns_false_for_two_part_person_name() -> None:
+    """is_software_name returns False for 'First Last' person names."""
+    assert is_software_name("Robert Smith") is False
+
+
+# --- ask_llm_for_best_author ---
+
+def _make_mock_best_author_response(replace: bool, author: str | None) -> unittest.mock.MagicMock:
+    """Return a mock LLM chat completion for ask_llm_for_best_author."""
+    content = json.dumps({"replace": replace, "author": author})
+    message = unittest.mock.MagicMock()
+    message.content = content
+    choice = unittest.mock.MagicMock()
+    choice.message = message
+    response = unittest.mock.MagicMock()
+    response.choices = [choice]
+    return response
+
+
+def test_ask_llm_for_best_author_returns_replacement_when_llm_recommends_replace() -> None:
+    """ask_llm_for_best_author returns the new author when LLM says to replace."""
+    mock_response = _make_mock_best_author_response(replace=True, author="Robert Smith")
+    with patch("openai.OpenAI") as mock_openai_class:
+        mock_client = unittest.mock.MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.chat.completions.create.return_value = mock_response
+        result = ask_llm_for_best_author("Adobe Acrobat", "some pdf text with by Robert Smith")
+    assert result == "Robert Smith"
+
+
+def test_ask_llm_for_best_author_returns_none_when_llm_recommends_keep() -> None:
+    """ask_llm_for_best_author returns None when LLM says to keep the existing author."""
+    mock_response = _make_mock_best_author_response(replace=False, author=None)
+    with patch("openai.OpenAI") as mock_openai_class:
+        mock_client = unittest.mock.MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.chat.completions.create.return_value = mock_response
+        result = ask_llm_for_best_author("Jane Doe", "some pdf text")
+    assert result is None
+
+
+def test_ask_llm_for_best_author_returns_none_on_error() -> None:
+    """ask_llm_for_best_author returns None when the LLM raises an exception."""
+    with patch("openai.OpenAI") as mock_openai_class:
+        mock_client = unittest.mock.MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = Exception("connection refused")
+        result = ask_llm_for_best_author("Adobe Acrobat", "some pdf text")
+    assert result is None
+
+
+def test_ask_llm_for_best_author_joins_list_authors() -> None:
+    """ask_llm_for_best_author converts a JSON list of authors to a comma-separated string."""
+    mock_response = _make_mock_best_author_response(replace=True, author=["Alice Smith", "Bob Jones"])
+    with patch("openai.OpenAI") as mock_openai_class:
+        mock_client = unittest.mock.MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.chat.completions.create.return_value = mock_response
+        result = ask_llm_for_best_author("Adobe Acrobat", "some text")
+    assert result == "Alice Smith, Bob Jones"
+
+
+def test_ask_llm_for_best_author_returns_none_for_empty_list_authors() -> None:
+    """ask_llm_for_best_author returns None when the LLM returns an empty list of authors."""
+    mock_response = _make_mock_best_author_response(replace=True, author=[])
+    with patch("openai.OpenAI") as mock_openai_class:
+        mock_client = unittest.mock.MagicMock()
+        mock_openai_class.return_value = mock_client
+        mock_client.chat.completions.create.return_value = mock_response
+        result = ask_llm_for_best_author("Adobe Acrobat", "some text")
+    assert result is None
+
+
+# --- fix_pdf: replacing bad/software author ---
+
+def test_fix_pdf_replaces_software_author_with_llm_result() -> None:
+    """fix_pdf replaces a software-like author with the LLM's suggested author."""
+    path = make_pdf_file(title="My Book", author="Adobe Acrobat")
+    try:
+        with patch("bookfix.is_llm_available", return_value=True):
+            with patch("bookfix.ask_llm_for_best_author", return_value="Robert Smith"):
+                with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
+                    fix_pdf(path, dryrun=False)
+        reader = PdfReader(path)
+        assert reader.metadata is not None
+        assert reader.metadata.author == "Robert Smith"
+    finally:
+        os.unlink(path)
+
+
+def test_fix_pdf_keeps_software_author_when_llm_returns_none() -> None:
+    """fix_pdf keeps the existing author when the LLM does not recommend replacing."""
+    path = make_pdf_file(title="My Book", author="Adobe Acrobat")
+    try:
+        with patch("bookfix.is_llm_available", return_value=True):
+            with patch("bookfix.ask_llm_for_best_author", return_value=None):
+                with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
+                    fix_pdf(path, dryrun=False)
+        reader = PdfReader(path)
+        assert reader.metadata is not None
+        assert reader.metadata.author == "Adobe Acrobat"
+    finally:
+        os.unlink(path)
+
+
+def test_fix_pdf_does_not_call_ask_llm_for_best_author_for_person_name() -> None:
+    """fix_pdf does not call ask_llm_for_best_author when the author looks like a real person."""
+    path = make_pdf_file(title="My Book", author="Jane Doe")
+    try:
+        with patch("bookfix.is_llm_available", return_value=True):
+            with patch("bookfix.ask_llm_for_best_author") as mock_best_author:
+                with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
+                    fix_pdf(path, dryrun=False)
+        mock_best_author.assert_not_called()
+    finally:
+        os.unlink(path)
+
+
+def test_fix_pdf_dryrun_prints_replacement_author_when_software_detected(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """fix_pdf with dryrun prints the replacement author when software author is detected."""
+    path = make_pdf_file(title="My Book", author="Adobe Acrobat")
+    try:
+        with patch("bookfix.is_llm_available", return_value=True):
+            with patch("bookfix.ask_llm_for_best_author", return_value="Robert Smith"):
+                with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
+                    fix_pdf(path, dryrun=True)
+        captured = capsys.readouterr()
+        assert "Robert Smith" in captured.out
     finally:
         os.unlink(path)

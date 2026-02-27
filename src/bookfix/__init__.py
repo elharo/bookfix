@@ -85,6 +85,16 @@ _PUBLISHER_KEYWORDS = re.compile(
     re.IGNORECASE,
 )
 
+# Matches software program names that may be stored as PDF author metadata.
+_SOFTWARE_NAME_PATTERN = re.compile(
+    r'\b(acrobat|adobe|microsoft|word|excel|latex|tex|ghostscript|'
+    r'libreoffice|openoffice|pages|quark|indesign|framemaker|'
+    r'calibre|kindlegen|itext|pdfkit|reportlab|fpdf|'
+    r'pdftk|wkhtmltopdf|html2pdf|scanner|scan|pdfelement|'
+    r'nitro|foxit)\b',
+    re.IGNORECASE,
+)
+
 # Matches institutional affiliation lines like "Department of Mathematics, Harvard University"
 # or lines starting with "Department of".
 _AFFILIATION_PATTERN = re.compile(
@@ -134,6 +144,11 @@ def read_author(reader: PdfReader) -> str:
             if not _PUBLISHER_KEYWORDS.search(author):
                 return author
     return "Unknown Author"
+
+
+def is_software_name(author: str) -> bool:
+    """Return True if the author string looks like a software program name rather than a person."""
+    return bool(_SOFTWARE_NAME_PATTERN.search(author))
 
 
 def is_llm_available(
@@ -209,6 +224,56 @@ def ask_llm_for_metadata(
         return None, None
 
 
+def ask_llm_for_best_author(
+    metadata_author: str,
+    content_text: str,
+    model: str = _DEFAULT_MODEL,
+    base_url: str = _DEFAULT_LLM_URL,
+    api_key: Optional[str] = None,
+) -> Optional[str]:
+    """Ask an LLM whether the existing metadata author should be replaced.
+
+    Returns the replacement author string if the LLM recommends replacing the
+    metadata author (e.g., because it looks like a software name or the PDF
+    content contains a more complete name), or None to keep the existing author.
+    """
+    from openai import OpenAI
+
+    resolved_api_key = api_key or os.environ.get("OPENAI_API_KEY") or "ollama"
+    client = OpenAI(base_url=base_url, api_key=resolved_api_key)
+
+    prompt = (
+        f"A PDF has the author metadata set to: {metadata_author!r}\n\n"
+        "Here is text extracted from the PDF:\n"
+        f"{content_text[:3000]}\n\n"
+        "Decide whether the metadata author should be replaced. Replace it if:\n"
+        "1. It looks like a software program name (e.g., 'Adobe Acrobat', 'Microsoft Word'), or\n"
+        "2. The PDF text contains a more complete or correct author name.\n\n"
+        "Respond ONLY with a JSON object using exactly these keys:\n"
+        '{"replace": true or false, "author": "..."}\n'
+        'Set "replace" to true if the metadata author should be replaced with a better one '
+        "found in the text. Set \"author\" to the best author name from the text when replacing, "
+        "or null if not replacing."
+    )
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+        )
+        result = json.loads(response.choices[0].message.content)
+        should_replace = result.get("replace", False)
+        if not should_replace:
+            return None
+        raw_author = result.get("author")
+        if isinstance(raw_author, list):
+            return ", ".join(str(name) for name in raw_author) if raw_author else None
+        return raw_author or None
+    except Exception:  # noqa: BLE001 – treat all LLM errors as unavailable
+        return None
+
+
 def fix_pdf(
     filename: str,
     dryrun: bool,
@@ -231,23 +296,32 @@ def fix_pdf(
     updates: dict[str, str] = {}
     needs_title = title == "Unknown Title"
     needs_author = authors == "Unknown Author"
+    author_suspect = not needs_author and is_software_name(authors)
 
-    if needs_title or needs_author:
+    if needs_title or needs_author or author_suspect:
         max_pages = min(len(reader.pages), 5)
         pdf_text = "\n".join(
             reader.pages[i].extract_text() or "" for i in range(max_pages)
         )
 
+        llm_title: Optional[str] = None
+        llm_author: Optional[str] = None
         if is_llm_available(base_url=llm_url, api_key=api_key):
-            llm_title, llm_author = ask_llm_for_metadata(
-                pdf_text, model=model, base_url=llm_url, api_key=api_key
-            )
+            if needs_title or needs_author:
+                llm_title, llm_author = ask_llm_for_metadata(
+                    pdf_text, model=model, base_url=llm_url, api_key=api_key
+                )
+            if author_suspect:
+                replacement_author = ask_llm_for_best_author(
+                    authors, pdf_text, model=model, base_url=llm_url, api_key=api_key
+                )
+                if replacement_author:
+                    llm_author = replacement_author
         else:
             print(
                 f"LLM at {llm_url} is not available; falling back to text heuristics.",
                 file=sys.stderr,
             )
-            llm_title, llm_author = None, None
 
         if needs_title:
             resolved_title = llm_title or read_title(reader)
@@ -258,6 +332,8 @@ def fix_pdf(
             resolved_author = llm_author or read_author(reader)
             if resolved_author != "Unknown Author":
                 updates["/Author"] = resolved_author
+        elif author_suspect and llm_author:
+            updates["/Author"] = llm_author
 
     if updates:
         authors = updates.get("/Author", authors)
