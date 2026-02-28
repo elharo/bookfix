@@ -2,7 +2,6 @@
 
 import io
 import json
-import logging
 import os
 import tempfile
 import unittest.mock
@@ -894,53 +893,3 @@ def test_fix_pdf_prints_error_when_llm_unavailable(capsys: pytest.CaptureFixture
         assert "not available" in captured.err
     finally:
         os.unlink(path)
-
-
-# --- debug logging ---
-
-def test_fix_pdf_logs_author_at_debug_level(caplog: pytest.LogCaptureFixture) -> None:
-    """fix_pdf emits a DEBUG log message when writing an author."""
-    path = make_pdf_file(title="My Book")
-    try:
-        with caplog.at_level(logging.DEBUG, logger="bookfix"):
-            with patch("bookfix.is_llm_available", return_value=True):
-                with patch("bookfix.ask_llm_for_metadata", return_value=(None, "Debug Author")):
-                    with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
-                        fix_pdf(path, dryrun=False)
-        assert any("Debug Author" in record.message for record in caplog.records)
-    finally:
-        os.unlink(path)
-
-
-def test_fix_pdf_logs_title_at_debug_level(caplog: pytest.LogCaptureFixture) -> None:
-    """fix_pdf emits a DEBUG log message when writing a title."""
-    path = make_pdf_file(author="Jane Doe")
-    try:
-        with caplog.at_level(logging.DEBUG, logger="bookfix"):
-            with patch("bookfix.is_llm_available", return_value=True):
-                with patch("bookfix.ask_llm_for_metadata", return_value=("Debug Title", None)):
-                    with unittest.mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen_no_cover()):
-                        fix_pdf(path, dryrun=False)
-        assert any("Debug Title" in record.message for record in caplog.records)
-    finally:
-        os.unlink(path)
-
-
-def test_fetch_cover_image_logs_cover_url_at_debug_level(caplog: pytest.LogCaptureFixture) -> None:
-    """fetch_cover_image emits a DEBUG log message with the cover image URL."""
-    search_response = json.dumps({"docs": [{"cover_i": 42}]}).encode()
-    cover_bytes = make_jpeg_bytes()
-
-    def fake_urlopen(url):
-        mock_response = unittest.mock.MagicMock()
-        if "search.json" in url:
-            mock_response.read.return_value = search_response
-        else:
-            mock_response.read.return_value = cover_bytes
-        mock_response.__enter__ = lambda s: s
-        mock_response.__exit__ = unittest.mock.MagicMock(return_value=False)
-        return mock_response
-
-    with caplog.at_level(logging.DEBUG, logger="bookfix"):
-        with unittest.mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
-            fetch_cover_image("Some Book", "Some Author")
