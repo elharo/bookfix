@@ -3,6 +3,7 @@
 import argparse
 import io
 import json
+import logging
 import os
 import sys
 import urllib.parse
@@ -18,6 +19,8 @@ from typing import Optional
 _DEFAULT_LLM_URL = "http://localhost:11434/v1"
 # A sensible default open-weight model available in Ollama.
 _DEFAULT_MODEL = "llama3.2"
+
+logger = logging.getLogger(__name__)
 
 
 def get_pdf_metadata(filename: str) -> Optional[DocumentInformation]:
@@ -58,6 +61,7 @@ def fetch_cover_image(title: str, author: str) -> Optional[bytes]:
         return None
     cover_id = docs[0]["cover_i"]
     cover_url = f"https://covers.openlibrary.org/b/id/{cover_id}-L.jpg"
+    logger.debug("Cover image URL: %s", cover_url)
     with urllib.request.urlopen(cover_url) as response:
         return response.read()
 
@@ -253,11 +257,13 @@ def fix_pdf(
             resolved_title = llm_title or read_title(reader)
             if resolved_title != "Unknown Title":
                 updates["/Title"] = resolved_title
+                logger.debug("Writing title: %s", resolved_title)
 
         if needs_author:
             resolved_author = llm_author or read_author(reader)
             if resolved_author != "Unknown Author":
                 updates["/Author"] = resolved_author
+                logger.debug("Writing author: %s", resolved_author)
 
     if updates:
         authors = updates.get("/Author", authors)
